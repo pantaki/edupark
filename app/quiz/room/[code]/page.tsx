@@ -72,7 +72,7 @@ function RoomContent() {
     // Check if progress exists for this child and subject
     const { data: existing, error: getError } = await supabase
       .from("progress")
-      .select("id,xp,streak,correct_questions")
+      .select("id,xp,streak,correct_questions,total_questions")
       .eq("child_id", childSession.id)
       .eq("subject", subject)
       .maybeSingle();
