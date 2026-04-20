@@ -214,40 +214,144 @@ function LearnContent() {
   async function finishLesson() {
     setFinished(true);
     if (timerRef.current) clearInterval(timerRef.current);
-    if (!childSession) return;
+    if (!childSession) {
+      console.error("No childSession available");
+      return;
+    }
+
+    // Debug: log childSession details
+    console.log(
+      "finishLesson: childSession.id =",
+      childSession.id,
+      "subject =",
+      subject,
+    );
+
     const total = questions.length;
     const acc = total > 0 ? Math.round((score / total) * 100) : 0;
     const stars = acc >= 90 ? 3 : acc >= 70 ? 2 : acc >= 50 ? 1 : 0;
     setEarnedStars(stars);
     setMascot(MASCOT.finish);
-    if (stars >= 2) { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 4500); }
+    if (stars >= 2) {
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 4500);
+    }
 
-    await supabase.from("progress").upsert({
-      child_id: childSession.id, subject,
-      accuracy: acc, streak: maxStreak, xp: sessionXp,
-      total_questions: total, correct_questions: score,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "child_id,subject" });
+    // Update progress: first check if exists, then update or insert
+    const { data: existing, error: getError } = await supabase
+      .from("progress")
+      .select("id,xp,streak")
+      .eq("child_id", childSession.id)
+      .eq("subject", subject)
+      .maybeSingle();
+
+    if (getError) {
+      console.error("Error fetching progress:", getError);
+      return;
+    }
+
+    if (existing) {
+      // Update: accumulate xp and take max streak
+      const { error: updateError } = await supabase
+        .from("progress")
+        .update({
+          accuracy: acc,
+          streak: Math.max(existing.streak || 0, maxStreak),
+          xp: (existing.xp || 0) + sessionXp,
+          total_questions: total,
+          correct_questions: score,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+      if (updateError) console.error("Update progress error:", updateError);
+      else
+        console.log(
+          "✅ Progress updated for",
+          subject,
+          "| acc:",
+          acc,
+          "| xp:",
+          (existing.xp || 0) + sessionXp,
+        );
+    } else {
+      // Insert new
+      console.log("Inserting new progress with:", {
+        child_id: childSession.id,
+        subject,
+        accuracy: acc,
+        streak: maxStreak,
+        xp: sessionXp,
+        total_questions: total,
+        correct_questions: score,
+      });
+
+      const { data: insertData, error: insertError } = await supabase
+        .from("progress")
+        .insert({
+          child_id: childSession.id,
+          subject,
+          accuracy: acc,
+          streak: maxStreak,
+          xp: sessionXp,
+          total_questions: total,
+          correct_questions: score,
+          updated_at: new Date().toISOString(),
+        })
+        .select();
+
+      if (insertError) {
+        console.error("❌ Insert progress error:", insertError);
+      } else {
+        console.log("✅ Progress inserted for", subject, "| data:", insertData);
+      }
+    }
+
+    // Save session history
+    const { error: sessionError } = await supabase
+      .from("quiz_sessions")
+      .insert({
+        child_id: childSession.id,
+        subject,
+        score,
+        total,
+      });
+    if (sessionError) console.error("Save session error:", sessionError);
 
     if (lessonId) {
-      await supabase.from("child_lesson_progress").upsert({
-        child_id: childSession.id, lesson_id: lessonId,
-        status: "done", stars, completed_at: new Date().toISOString(),
-      }, { onConflict: "child_id,lesson_id" });
+      await supabase.from("child_lesson_progress").upsert(
+        {
+          child_id: childSession.id,
+          lesson_id: lessonId,
+          status: "done",
+          stars,
+          completed_at: new Date().toISOString(),
+        },
+        { onConflict: "child_id,lesson_id" },
+      );
 
       if (lesson) {
-        const { data: nextLesson } = await supabase.from("lessons")
-          .select("id").eq("subject", subject).eq("grade", grade)
+        const { data: nextLesson } = await supabase
+          .from("lessons")
+          .select("id")
+          .eq("subject", subject)
+          .eq("grade", grade)
           .gt("order_num", lesson.order_num || 0)
-          .order("order_num").limit(1).single();
+          .order("order_num")
+          .limit(1)
+          .single();
         if (nextLesson) {
-          await supabase.from("child_lesson_progress").upsert({
-            child_id: childSession.id, lesson_id: nextLesson.id, status: "available", stars: 0,
-          }, { onConflict: "child_id,lesson_id" });
+          await supabase.from("child_lesson_progress").upsert(
+            {
+              child_id: childSession.id,
+              lesson_id: nextLesson.id,
+              status: "available",
+              stars: 0,
+            },
+            { onConflict: "child_id,lesson_id" },
+          );
         }
       }
     }
-    await supabase.from("quiz_sessions").insert({ child_id: childSession.id, subject, score, total });
   }
 
   /* ── RESULT SCREEN ── */

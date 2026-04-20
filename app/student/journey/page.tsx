@@ -76,13 +76,22 @@ function JourneyContent() {
     if (!childSession) return;
 
     const [{ data: ls }, { data: prog }, { data: pr }] = await Promise.all([
-      supabase.from("lessons").select("*")
-        .eq("subject", subject).eq("grade", grade)
+      supabase
+        .from("lessons")
+        .select("*")
+        .eq("subject", subject)
+        .eq("grade", grade)
         .order("order_num"),
-      supabase.from("child_lesson_progress").select("*")
+      supabase
+        .from("child_lesson_progress")
+        .select("*")
         .eq("child_id", childSession.id),
-      supabase.from("progress").select("streak")
-        .eq("child_id", childSession.id).eq("subject", subject).single(),
+      supabase
+        .from("progress")
+        .select("streak")
+        .eq("child_id", childSession.id)
+        .eq("subject", subject)
+        .maybeSingle(),
     ]);
 
     const lessonList: Lesson[] = ls || [];
@@ -138,14 +147,21 @@ function JourneyContent() {
   );
 
   return (
-    <div className="min-h-screen pb-24" style={{ background: "linear-gradient(180deg, #f0f4ff 0%, #faf9ff 60%)" }}>
-
+    <div
+      className="min-h-screen pb-24"
+      style={{ background: "linear-gradient(180deg, #f0f4ff 0%, #faf9ff 60%)" }}
+    >
       {/* ── Header ── */}
-      <div className={`bg-gradient-to-r ${subjectInfo.color} px-4 pt-12 pb-16 relative overflow-hidden`}>
+      <div
+        className={`bg-gradient-to-r ${subjectInfo.color} px-4 pt-12 pb-16 relative overflow-hidden`}
+      >
         <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-white/10 -translate-y-10 translate-x-10" />
         <div className="absolute bottom-0 left-10 w-24 h-24 rounded-full bg-white/10 translate-y-8" />
 
-        <button onClick={() => router.back()} className="flex items-center gap-2 text-white/80 mb-4 active:scale-95 transition-all">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-2 text-white/80 mb-4 active:scale-95 transition-all"
+        >
           <ArrowLeft className="w-5 h-5" /> Quay lại
         </button>
 
@@ -153,26 +169,34 @@ function JourneyContent() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-4xl">{subjectInfo.emoji}</span>
-              <h1 className="font-display font-black text-2xl text-white drop-shadow">{subjectInfo.label} – Lớp {grade}</h1>
+              <h1 className="font-display font-black text-2xl text-white drop-shadow">
+                {subjectInfo.label} – Lớp {grade}
+              </h1>
             </div>
             {Object.keys(chapters)[0] && (
-              <p className="text-white/80 text-sm font-semibold ml-1">{Object.keys(chapters)[0]}</p>
+              <p className="text-white/80 text-sm font-semibold ml-1">
+                {Object.keys(chapters)[0]}
+              </p>
             )}
             <div className="flex gap-3 mt-3">
               {streak > 0 && (
                 <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur rounded-2xl px-3 py-1.5">
                   <Flame className="w-4 h-4 text-orange-200" />
-                  <span className="text-white font-extrabold text-sm">{streak} ngày</span>
+                  <span className="text-white font-extrabold text-sm">
+                    {streak} ngày
+                  </span>
                 </div>
               )}
               <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur rounded-2xl px-3 py-1.5">
                 <Star className="w-4 h-4 text-yellow-200 fill-yellow-200" />
-                <span className="text-white font-extrabold text-sm">{
-                  lessons.reduce((s, l) => s + getStars(l.id), 0)
-                } sao</span>
+                <span className="text-white font-extrabold text-sm">
+                  {lessons.reduce((s, l) => s + getStars(l.id), 0)} sao
+                </span>
               </div>
               <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur rounded-2xl px-3 py-1.5">
-                <span className="text-white font-extrabold text-sm">{totalDone}/{totalLessons} bài</span>
+                <span className="text-white font-extrabold text-sm">
+                  {totalDone}/{totalLessons} bài
+                </span>
               </div>
             </div>
           </div>
@@ -183,17 +207,24 @@ function JourneyContent() {
           <div className="h-3 bg-white/20 rounded-full overflow-hidden">
             <div
               className="h-full bg-white rounded-full transition-all duration-700"
-              style={{ width: totalLessons > 0 ? `${Math.round(totalDone / totalLessons * 100)}%` : "0%" }}
+              style={{
+                width:
+                  totalLessons > 0
+                    ? `${Math.round((totalDone / totalLessons) * 100)}%`
+                    : "0%",
+              }}
             />
           </div>
         </div>
       </div>
 
       {/* ── Mascot ── */}
-      <div className="px-4 -mt-5">
+      <div className="px-4 mt-2">
         <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/60 px-4 py-3 flex items-center gap-3 border border-slate-100">
           <span className="text-3xl">{mascot.emoji}</span>
-          <p className="font-bold text-slate-700 text-sm flex-1">{mascot.msg}</p>
+          <p className="font-bold text-slate-700 text-sm flex-1">
+            {mascot.msg}
+          </p>
         </div>
       </div>
 
@@ -204,7 +235,9 @@ function JourneyContent() {
             {/* Chapter header */}
             <div className="flex items-center gap-3 mb-6">
               <div className="flex-1 h-px bg-slate-200" />
-              <span className="font-extrabold text-slate-500 text-xs uppercase tracking-widest px-2">{chapterName}</span>
+              <span className="font-extrabold text-slate-500 text-xs uppercase tracking-widest px-2">
+                {chapterName}
+              </span>
               <div className="flex-1 h-px bg-slate-200" />
             </div>
 
@@ -221,16 +254,19 @@ function JourneyContent() {
                   const isActive = activeLesson === lesson.id;
 
                   return (
-                    <div key={lesson.id} className={`flex items-center gap-4 ${isLeft ? "flex-row" : "flex-row-reverse"}`}>
-
+                    <div
+                      key={lesson.id}
+                      className={`flex items-center gap-4 ${isLeft ? "flex-row" : "flex-row-reverse"}`}
+                    >
                       {/* Node circle */}
                       <button
                         className={`relative flex-shrink-0 w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90
-                          ${status === "done"
-                            ? "bg-gradient-to-br from-yellow-400 to-orange-400 shadow-lg shadow-orange-200"
-                            : status === "available"
-                            ? `bg-gradient-to-br ${subjectInfo.color} shadow-lg shadow-blue-200 ${isActive ? "scale-110 ring-4 ring-white ring-offset-2 ring-offset-blue-100" : ""}`
-                            : "bg-slate-200 shadow-inner"
+                          ${
+                            status === "done"
+                              ? "bg-gradient-to-br from-yellow-400 to-orange-400 shadow-lg shadow-orange-200"
+                              : status === "available"
+                                ? `bg-gradient-to-br ${subjectInfo.color} shadow-lg shadow-blue-200 ${isActive ? "scale-110 ring-4 ring-white ring-offset-2 ring-offset-blue-100" : ""}`
+                                : "bg-slate-200 shadow-inner"
                           }`}
                         onClick={() => {
                           if (status === "locked") {
@@ -263,22 +299,30 @@ function JourneyContent() {
                       </button>
 
                       {/* Card */}
-                      <div className={`flex-1 transition-all duration-200 ${isActive ? "scale-[1.02]" : ""}`}>
-                        <div className={`rounded-3xl p-4 border-2 ${
-                          status === "locked"
-                            ? "bg-slate-100 border-slate-200 opacity-60"
-                            : status === "done"
-                            ? "bg-white border-yellow-200 shadow-md shadow-yellow-100"
-                            : `bg-white border-2 ${LEVEL_BG[lesson.level]} shadow-md`
-                        }`}>
+                      <div
+                        className={`flex-1 transition-all duration-200 ${isActive ? "scale-[1.02]" : ""}`}
+                      >
+                        <div
+                          className={`rounded-3xl p-4 border-2 ${
+                            status === "locked"
+                              ? "bg-slate-100 border-slate-200 opacity-60"
+                              : status === "done"
+                                ? "bg-white border-yellow-200 shadow-md shadow-yellow-100"
+                                : `bg-white border-2 ${LEVEL_BG[lesson.level]} shadow-md`
+                          }`}
+                        >
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <span className={`text-xs font-extrabold px-2 py-0.5 rounded-full bg-gradient-to-r ${LEVEL_COLOR[lesson.level]} text-white`}>
+                                <span
+                                  className={`text-xs font-extrabold px-2 py-0.5 rounded-full bg-gradient-to-r ${LEVEL_COLOR[lesson.level]} text-white`}
+                                >
                                   {LEVEL_LABEL[lesson.level]}
                                 </span>
                               </div>
-                              <h3 className={`font-extrabold text-base leading-tight ${status === "locked" ? "text-slate-400" : "text-slate-800"}`}>
+                              <h3
+                                className={`font-extrabold text-base leading-tight ${status === "locked" ? "text-slate-400" : "text-slate-800"}`}
+                              >
                                 {lesson.title}
                               </h3>
                               {status === "done" && (
@@ -291,11 +335,15 @@ function JourneyContent() {
                             {/* Action button */}
                             {status !== "locked" && isActive && (
                               <button
-                                onClick={() => router.push(
-                                  `/student/learn?lessonId=${lesson.id}&subject=${subject}&grade=${grade}`
-                                )}
+                                onClick={() =>
+                                  router.push(
+                                    `/student/learn?lessonId=${lesson.id}&subject=${subject}&grade=${grade}`,
+                                  )
+                                }
                                 className={`ml-3 flex-shrink-0 flex items-center gap-1 px-4 py-2 rounded-2xl font-extrabold text-sm text-white bg-gradient-to-r ${
-                                  status === "done" ? "from-yellow-400 to-orange-400" : LEVEL_COLOR[lesson.level]
+                                  status === "done"
+                                    ? "from-yellow-400 to-orange-400"
+                                    : LEVEL_COLOR[lesson.level]
                                 } active:scale-95 transition-all shadow-md`}
                               >
                                 {status === "done" ? "Luyện lại" : "Bắt đầu"}
@@ -317,8 +365,12 @@ function JourneyContent() {
         {lessons.length === 0 && (
           <div className="text-center py-16">
             <div className="text-6xl mb-4">📭</div>
-            <p className="font-extrabold text-slate-500 text-lg">Chưa có bài học nào</p>
-            <p className="text-slate-400 text-sm mt-2">Bài học cho môn này đang được chuẩn bị</p>
+            <p className="font-extrabold text-slate-500 text-lg">
+              Chưa có bài học nào
+            </p>
+            <p className="text-slate-400 text-sm mt-2">
+              Bài học cho môn này đang được chuẩn bị
+            </p>
           </div>
         )}
       </div>

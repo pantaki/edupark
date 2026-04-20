@@ -126,35 +126,68 @@ export default function CreateLessonPage() {
   async function handleSave() {
     if (!title.trim()) { toast.error("Nhập tên bài học nhé!"); return; }
     if (questions.length === 0) { toast.error("Cần ít nhất 1 câu hỏi!"); return; }
+    if (subject === "other" && !customSubject.trim()) {
+      toast.error("Nhập tên môn học khi chọn Môn khác.");
+      return;
+    }
     const bad = questions.findIndex(q => !q.question.trim() || !q.correct || q.options.some(o => !o.trim()));
     if (bad >= 0) { toast.error(`Câu ${bad + 1} chưa đầy đủ!`); return; }
-    if (!userId) return;
+    if (!userId) {
+      toast.error("Không xác thực được tài khoản.");
+      return;
+    }
+
     setSaving(true);
     try {
-      const { data: ls, error: lErr } = await supabase.from("lessons").insert({
-        title: title.trim(),
-        subject: subject === "other" ? (customSubject.trim() || "other") : subject,
-        grade, level,
-        chapter: chapter.trim() || null,
-        created_by: userId,
-        is_builtin: false,
-        order_num: Date.now(),
-      }).select().single();
-      if (lErr) throw lErr;
+      const lessonSubject =
+        subject === "other" ? customSubject.trim() : subject;
+      const { data: ls, error: lErr } = await supabase
+        .from("lessons")
+        .insert({
+          title: title.trim(),
+          subject: lessonSubject,
+          grade,
+          level,
+          chapter: chapter.trim() || undefined,
+          created_by: userId,
+          is_builtin: false,
+          order_num: Math.floor(Date.now() / 1000),
+        })
+        .select()
+        .single();
 
-      await supabase.from("lesson_questions").insert(
+      if (lErr) {
+        console.error("Lesson insert error:", lErr);
+        throw lErr;
+      }
+      if (!ls?.id) {
+        throw new Error("Không nhận được lesson ID sau khi tạo.");
+      }
+
+      const { error: qErr } = await supabase.from("lesson_questions").insert(
         questions.map((q, i) => ({
           lesson_id: ls.id,
           question: q.question,
           options: q.options,
           correct: q.correct,
           order_num: i,
-        }))
+        })),
       );
+      if (qErr) {
+        console.error("Lesson questions insert error:", qErr);
+        throw qErr;
+      }
+
       toast.success("Đã lưu bài học! 🎉");
       router.push("/parent/dashboard");
-    } catch { toast.error("Lỗi lưu bài học!"); }
-    finally { setSaving(false); }
+    } catch (err: any) {
+      console.error("Save lesson failed:", err);
+      toast.error(
+        err?.message ? `Lỗi lưu bài học: ${err.message}` : "Lỗi lưu bài học!",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
