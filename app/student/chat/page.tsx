@@ -48,19 +48,20 @@ export default function StudentChatPage() {
       });
 
     if (channelRef.current) supabase.removeChannel(channelRef.current);
-    const channel = supabase.channel(`chat-student-${childSession.id}`)
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "messages",
-        filter: `to_child=eq.${childSession.id}`,
-      }, (payload) => {
-        addMessage(payload.new as Message);
-      })
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "messages",
-        filter: `from_child=eq.${childSession.id}`,
-      }, (payload) => {
-        addMessage(payload.new as Message);
-      })
+    const channel = supabase
+      .channel(`chat-student-${childSession.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `or(to_child.eq.${childSession.id},from_child.eq.${childSession.id})`,
+        },
+        (payload) => {
+          addMessage(payload.new as Message);
+        },
+      )
       .subscribe();
     channelRef.current = channel;
     return () => { supabase.removeChannel(channel); };

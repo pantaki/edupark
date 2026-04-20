@@ -65,15 +65,18 @@ export default function ChatPage() {
     if (!selectedChild) return;
     if (channelRef.current) supabase.removeChannel(channelRef.current);
 
-    const channel = supabase.channel(`chat-parent-${selectedChild.id}`)
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "messages",
-        filter: `to_child=eq.${selectedChild.id}`,
-      }, (payload) => addMessage(payload.new as Message))
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "messages",
-        filter: `from_child=eq.${selectedChild.id}`,
-      }, (payload) => addMessage(payload.new as Message))
+    const channel = supabase
+      .channel(`chat-parent-${selectedChild.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `or(to_child.eq.${selectedChild.id},from_child.eq.${selectedChild.id})`,
+        },
+        (payload) => addMessage(payload.new as Message),
+      )
       .subscribe();
 
     channelRef.current = channel;
