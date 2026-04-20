@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800;900&family=Nunito:wght@400;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { -webkit-tap-highlight-color: transparent; }
+  html { font-family: 'Nunito', sans-serif; scroll-behavior: smooth; }
+  body {
+    @apply text-slate-800;
+    font-family: 'Nunito', sans-serif;
+    overscroll-behavior: none;
+    background: #dde3f0;
+  }
+  h1, h2, h3 { font-family: 'Baloo 2', cursive; }
+}
+
+/* ── Desktop container: mọi page wrap bằng <div className="app-frame"> ── */
+.app-frame {
+  width: 100%;
+  max-width: 900px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background: #f8fafc;
+  position: relative;
+  box-shadow: 0 0 60px rgba(0,0,0,0.15);
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-gradient-to-r from-blue-500 to-blue-600 text-white font-extrabold rounded-2xl px-6 py-4 text-lg shadow-lg shadow-blue-200 active:scale-95 transition-all duration-150 hover:shadow-xl w-full flex items-center justify-center gap-2;
+  }
+  .btn-secondary {
+    @apply bg-white text-slate-700 font-extrabold rounded-2xl px-6 py-4 text-lg shadow-md border-2 border-slate-200 active:scale-95 transition-all duration-150 w-full;
+  }
+  .btn-fun {
+    @apply font-extrabold rounded-2xl px-6 py-4 text-lg active:scale-95 transition-all duration-150 w-full shadow-lg;
+  }
+  .card {
+    @apply bg-white rounded-3xl shadow-sm border border-slate-100 p-4;
+  }
+  .card-hover {
+    @apply card hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer;
+  }
+  .input-field {
+    @apply w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3.5 text-base font-bold focus:outline-none focus:border-blue-400 focus:bg-white transition-all duration-150;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-extrabold;
+  }
+  .screen-container {
+    @apply min-h-screen bg-slate-50 pb-20;
+  }
+  .page-header {
+    @apply sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 py-3 flex items-center gap-3;
+  }
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+
+@keyframes confetti-fall {
+  0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+.confetti-piece {
+  position: fixed;
+  pointer-events: none;
+  z-index: 999;
+  animation: confetti-fall linear forwards;
+}
+
+/* ── Responsive layout ── */
+/* Mobile: app-frame full width */
+/* Tablet (≥640px): centered, max 480px, show side bg */
+/* Desktop (≥1024px): centered, max 480px, larger side bg */
+@media (min-width: 640px) {
+  body {
+    background: linear-gradient(135deg, #dde3f0 0%, #c7d0e8 100%);
+    min-height: 100vh;
+  }
+  .app-frame {
+    min-height: 100vh;
+    box-shadow: 0 0 80px rgba(0,0,0,0.18);
+  }
+}
+
+/* Field label utility */
+.field-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
