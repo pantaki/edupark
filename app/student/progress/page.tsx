@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/lib/store";
 import { supabase } from "@/lib/supabaseClient";
@@ -19,71 +19,129 @@ export default function ProgressPage() {
   const progressChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const sessionChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  useEffect(() => {
-    if (!childSession) { router.replace("/student/enter-code"); return; }
-
-    Promise.all([
+  const loadProgress = async () => {
+    if (!childSession) return;
+    const [{ data: prog }, { data: sess }] = await Promise.all([
       supabase.from("progress").select("*").eq("child_id", childSession.id),
-      supabase.from("quiz_sessions").select("*").eq("child_id", childSession.id).order("completed_at", { ascending: false }).limit(10),
-    ]).then(([{ data: prog }, { data: sess }]) => {
-      setProgress(prog || []);
-      setSessions(sess || []);
-      setLoading(false);
-    });
+      supabase
+        .from("quiz_sessions")
+        .select("*")
+        .eq("child_id", childSession.id)
+        .order("completed_at", { ascending: false })
+        .limit(10),
+    ]);
+    setProgress(prog || []);
+    setSessions(sess || []);
+  };
 
-    if (progressChannelRef.current) supabase.removeChannel(progressChannelRef.current);
-    if (sessionChannelRef.current) supabase.removeChannel(sessionChannelRef.current);
+  useEffect(() => {
+    if (!childSession) {
+      router.replace("/student/enter-code");
+      return;
+    }
 
-    const progressChannel = supabase.channel(`student-progress-${childSession.id}`)
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "progress",
-        filter: `child_id=eq.${childSession.id}`,
-      }, (payload) => {
-        const newProg = payload.new as Progress;
-        setProgress(prev => {
-          const exists = prev.find(p => p.subject === newProg.subject);
-          if (exists) return prev.map(p => p.subject === newProg.subject ? newProg : p);
-          return [...prev, newProg];
-        });
-      })
-      .on("postgres_changes", {
-        event: "UPDATE", schema: "public", table: "progress",
-        filter: `child_id=eq.${childSession.id}`,
-      }, (payload) => {
-        const updatedProg = payload.new as Progress;
-        setProgress(prev => prev.map(p => p.subject === updatedProg.subject ? updatedProg : p));
-      })
-      .on("postgres_changes", {
-        event: "DELETE", schema: "public", table: "progress",
-        filter: `child_id=eq.${childSession.id}`,
-      }, (payload) => {
-        const oldProg = payload.old as Progress;
-        setProgress(prev => prev.filter(p => p.subject !== oldProg.subject));
-      })
+    loadProgress().then(() => setLoading(false));
+
+    if (progressChannelRef.current)
+      supabase.removeChannel(progressChannelRef.current);
+    if (sessionChannelRef.current)
+      supabase.removeChannel(sessionChannelRef.current);
+
+    const progressChannel = supabase
+      .channel(`student-progress-${childSession.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "progress",
+          filter: `child_id=eq.${childSession.id}`,
+        },
+        (payload) => {
+          const newProg = payload.new as Progress;
+          setProgress((prev) => {
+            const exists = prev.find((p) => p.subject === newProg.subject);
+            if (exists)
+              return prev.map((p) =>
+                p.subject === newProg.subject ? newProg : p,
+              );
+            return [...prev, newProg];
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "progress",
+          filter: `child_id=eq.${childSession.id}`,
+        },
+        (payload) => {
+          const updatedProg = payload.new as Progress;
+          setProgress((prev) =>
+            prev.map((p) =>
+              p.subject === updatedProg.subject ? updatedProg : p,
+            ),
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "progress",
+          filter: `child_id=eq.${childSession.id}`,
+        },
+        (payload) => {
+          const oldProg = payload.old as Progress;
+          setProgress((prev) =>
+            prev.filter((p) => p.subject !== oldProg.subject),
+          );
+        },
+      )
       .subscribe();
 
-    const sessionChannel = supabase.channel(`student-session-${childSession.id}`)
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "quiz_sessions",
-        filter: `child_id=eq.${childSession.id}`,
-      }, (payload) => {
-        setSessions(prev => [payload.new as Session, ...prev].slice(0, 10));
-      })
-      .on("postgres_changes", {
-        event: "UPDATE", schema: "public", table: "quiz_sessions",
-        filter: `child_id=eq.${childSession.id}`,
-      }, (payload) => {
-        const updated = payload.new as Session;
-        setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
-      })
+    const sessionChannel = supabase
+      .channel(`student-session-${childSession.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "quiz_sessions",
+          filter: `child_id=eq.${childSession.id}`,
+        },
+        (payload) => {
+          setSessions((prev) => [payload.new as Session, ...prev].slice(0, 10));
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "quiz_sessions",
+          filter: `child_id=eq.${childSession.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as Session;
+          setSessions((prev) =>
+            prev.map((s) => (s.id === updated.id ? updated : s)),
+          );
+        },
+      )
       .subscribe();
 
     progressChannelRef.current = progressChannel;
     sessionChannelRef.current = sessionChannel;
 
     return () => {
-      if (progressChannelRef.current) supabase.removeChannel(progressChannelRef.current);
-      if (sessionChannelRef.current) supabase.removeChannel(sessionChannelRef.current);
+      if (progressChannelRef.current)
+        supabase.removeChannel(progressChannelRef.current);
+      if (sessionChannelRef.current)
+        supabase.removeChannel(sessionChannelRef.current);
     };
   }, [childSession, router]);
 

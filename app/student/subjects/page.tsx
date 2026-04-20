@@ -10,18 +10,64 @@ import Link from "next/link";
 import { toast } from "sonner";
 
 interface Progress { subject: string; accuracy: number; streak: number; xp: number; }
+interface LessonStat {
+  done: number;
+  total: number;
+}
 
 export default function SubjectsPage() {
   const router = useRouter();
   const { childSession, setChildSession } = useAppStore();
   const [progress, setProgress] = useState<Progress[]>([]);
+  const [lessonStats, setLessonStats] = useState<Record<string, LessonStat>>(
+    {},
+  );
   const [clock, setClock] = useState("");
 
   useEffect(() => {
     if (!childSession) { router.replace("/student/enter-code"); return; }
-    supabase.from("progress").select("*").eq("child_id", childSession.id).then(({ data }) => {
-      setProgress(data || []);
-    });
+
+    const loadData = async () => {
+      const [{ data: prog }, { data: lessons }, { data: lessonProgress }] =
+        await Promise.all([
+          supabase.from("progress").select("*").eq("child_id", childSession.id),
+          supabase
+            .from("lessons")
+            .select("id,subject")
+            .eq("grade", childSession.grade),
+          supabase
+            .from("child_lesson_progress")
+            .select("lesson_id,status")
+            .eq("child_id", childSession.id),
+        ]);
+
+      setProgress(prog || []);
+
+      const stats: Record<string, LessonStat> = {};
+      (lessons || []).forEach((lesson: { id: string; subject: string }) => {
+        stats[lesson.subject] = stats[lesson.subject] || { done: 0, total: 0 };
+        stats[lesson.subject].total += 1;
+      });
+      (lessonProgress || []).forEach(
+        (item: { lesson_id: string; status: string }) => {
+          const lesson = (lessons || []).find(
+            (l: { id: string }) => l.id === item.lesson_id,
+          );
+          if (lesson && item.status === "done") {
+            stats[lesson.subject] = stats[lesson.subject] || {
+              done: 0,
+              total: 0,
+            };
+            stats[lesson.subject].done += 1;
+          }
+        },
+      );
+
+      setLessonStats(stats);
+    };
+
+    loadData();
+
     const tick = () => setClock(new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }));
     tick();
     const id = setInterval(tick, 30000);
@@ -80,24 +126,43 @@ export default function SubjectsPage() {
             {SUBJECTS.map((s, i) => {
               const prog = progress.find(p => p.subject === s.id);
               const acc = Math.round(prog?.accuracy || 0);
+              const stat = lessonStats[s.id];
               const isWide = i === SUBJECTS.length - 1 && SUBJECTS.length % 2 !== 0;
+              const showProgress = Boolean(prog || stat?.total);
+              const percent = stat?.total
+                ? Math.round((stat.done / stat.total) * 100)
+                : acc;
               return (
-                <Link key={s.id} href={`/student/journey?subject=${s.id}&grade=${childSession.grade}`}
+                <Link
+                  key={s.id}
+                  href={`/student/journey?subject=${s.id}&grade=${childSession.grade}`}
                   className={`relative bg-gradient-to-br ${s.color} rounded-3xl p-5 flex flex-col items-center gap-2
                     active:scale-95 transition-all duration-150 shadow-lg overflow-hidden cursor-pointer
-                    ${isWide ? "col-span-2" : ""}`}>
+                    ${isWide ? "col-span-2" : ""}`}
+                >
                   {/* BG decoration */}
                   <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-white/10 -translate-y-4 translate-x-4" />
                   <span className="text-5xl z-10">{s.emoji}</span>
-                  <h2 className="font-display font-black text-xl text-white z-10">{s.label}</h2>
-                  {prog && (
+                  <h2 className="font-display font-black text-xl text-white z-10">
+                    {s.label}
+                  </h2>
+                  {showProgress && (
                     <div className="w-full z-10">
                       <div className="flex justify-between mb-1">
-                        <span className="text-white/70 text-xs font-bold">Tiến độ</span>
-                        <span className="text-white font-extrabold text-xs">{acc}%</span>
+                        <span className="text-white/70 text-xs font-bold">
+                          {stat?.total ? "Tiến độ" : "Chính xác"}
+                        </span>
+                        <span className="text-white font-extrabold text-xs">
+                          {stat?.total
+                            ? `${stat.done}/${stat.total} bài`
+                            : `${acc}%`}
+                        </span>
                       </div>
                       <div className="h-2 bg-white/30 rounded-full overflow-hidden">
-                        <div className="h-full bg-white rounded-full" style={{ width: `${acc}%` }} />
+                        <div
+                          className="h-full bg-white rounded-full"
+                          style={{ width: `${percent}%` }}
+                        />
                       </div>
                     </div>
                   )}
