@@ -6,7 +6,7 @@ import { ParentBottomNav } from "@/components/shared/BottomNav";
 import { AVATAR_EMOJI } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
-import { LogOut, Plus, Trophy, Flame, Target } from "lucide-react";
+import { LogOut, Plus, Trophy, Flame, Target, BookOpen } from "lucide-react";
 
 interface Child {
   id: string; name: string; code: string; avatar: string; grade: number;
@@ -257,6 +257,30 @@ export default function ParentDashboard() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Quick actions */}
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            href="/parent/my-lessons"
+            className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl p-4 text-white flex flex-col items-center justify-center gap-2 active:scale-95 transition-all shadow-lg"
+          >
+            <BookOpen className="w-6 h-6" />
+            <div className="text-center">
+              <p className="font-black text-sm">Bài học</p>
+              <p className="text-white/70 text-xs">Quản lý & gán bài</p>
+            </div>
+          </Link>
+          <Link
+            href="/parent/create-lesson"
+            className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl p-4 text-white flex flex-col items-center justify-center gap-2 active:scale-95 transition-all shadow-lg"
+          >
+            <Plus className="w-6 h-6" />
+            <div className="text-center">
+              <p className="font-black text-sm">Tạo bài</p>
+              <p className="text-white/70 text-xs">Bài học mới</p>
+            </div>
+          </Link>
         </div>
 
         {/* Subject progress */}

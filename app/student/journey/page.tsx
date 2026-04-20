@@ -75,13 +75,7 @@ function JourneyContent() {
   const load = useCallback(async () => {
     if (!childSession) return;
 
-    const [{ data: ls }, { data: prog }, { data: pr }] = await Promise.all([
-      supabase
-        .from("lessons")
-        .select("*")
-        .eq("subject", subject)
-        .eq("grade", grade)
-        .order("order_num"),
+    const [{ data: prog }, { data: pr }] = await Promise.all([
       supabase
         .from("child_lesson_progress")
         .select("*")
@@ -94,22 +88,64 @@ function JourneyContent() {
         .maybeSingle(),
     ]);
 
-    const lessonList: Lesson[] = ls || [];
-    setLessons(lessonList);
     setStreak(pr?.streak || 0);
 
-    // Build progress map
+    // Build progress map from assigned lessons
     const pMap: Record<string, LessonProgress> = {};
-    (prog || []).forEach((p: LessonProgress) => { pMap[p.lesson_id] = p; });
+    const assignedLessonIds: string[] = [];
+    (prog || []).forEach((p: LessonProgress) => {
+      pMap[p.lesson_id] = p;
+      assignedLessonIds.push(p.lesson_id);
+    });
+
+    // Fetch lesson details for assigned lessons (any grade)
+    let lessons: Lesson[] = [];
+    if (assignedLessonIds.length > 0) {
+      const { data: assignedLessons } = await supabase
+        .from("lessons")
+        .select("*")
+        .in("id", assignedLessonIds)
+        .eq("subject", subject);
+      lessons = (assignedLessons || []).filter(
+        (l: Lesson) => l.subject === subject,
+      );
+    }
+
+    // Also add lessons from current grade (for backward compatibility)
+    const { data: gradeLessons } = await supabase
+      .from("lessons")
+      .select("*")
+      .eq("subject", subject)
+      .eq("grade", grade)
+      .order("order_num");
+
+    // Merge: assigned lessons first, then add unassigned grade lessons
+    const lessonIds = new Set(lessons.map((l: Lesson) => l.id));
+    (gradeLessons || []).forEach((l: Lesson) => {
+      if (!lessonIds.has(l.id)) {
+        lessons.push(l);
+      }
+    });
+    lessons.sort(
+      (a: Lesson, b: Lesson) => (a.order_num || 0) - (b.order_num || 0),
+    );
+
+    setLessons(lessons);
 
     // Auto-unlock first lesson if no progress yet
-    if (lessonList.length > 0) {
-      const firstId = lessonList[0].id;
+    if (lessons.length > 0) {
+      const firstId = lessons[0].id;
       if (!pMap[firstId]) {
         pMap[firstId] = { lesson_id: firstId, status: "available", stars: 0 };
-        await supabase.from("child_lesson_progress").upsert({
-          child_id: childSession.id, lesson_id: firstId, status: "available", stars: 0,
-        }, { onConflict: "child_id,lesson_id" });
+        await supabase.from("child_lesson_progress").upsert(
+          {
+            child_id: childSession.id,
+            lesson_id: firstId,
+            status: "available",
+            stars: 0,
+          },
+          { onConflict: "child_id,lesson_id" },
+        );
       }
     }
 

@@ -28,26 +28,38 @@ export default function SubjectsPage() {
     if (!childSession) { router.replace("/student/enter-code"); return; }
 
     const loadData = async () => {
-      const [{ data: prog }, { data: lessons }, { data: lessonProgress }] =
-        await Promise.all([
-          supabase.from("progress").select("*").eq("child_id", childSession.id),
-          supabase
-            .from("lessons")
-            .select("id,subject")
-            .eq("grade", childSession.grade),
-          supabase
-            .from("child_lesson_progress")
-            .select("lesson_id,status")
-            .eq("child_id", childSession.id),
-        ]);
+      const [{ data: prog }, { data: lessonProgress }] = await Promise.all([
+        supabase.from("progress").select("*").eq("child_id", childSession.id),
+        supabase
+          .from("child_lesson_progress")
+          .select("lesson_id,status")
+          .eq("child_id", childSession.id),
+      ]);
 
       setProgress(prog || []);
+
+      // Get all lesson IDs assigned to this child
+      const lessonIds = (lessonProgress || []).map(
+        (p: { lesson_id: string }) => p.lesson_id,
+      );
+
+      if (lessonIds.length === 0) {
+        setLessonStats({});
+        return;
+      }
+
+      // Fetch lesson details for assigned lessons
+      const { data: lessons } = await supabase
+        .from("lessons")
+        .select("id,subject")
+        .in("id", lessonIds);
 
       const stats: Record<string, LessonStat> = {};
       (lessons || []).forEach((lesson: { id: string; subject: string }) => {
         stats[lesson.subject] = stats[lesson.subject] || { done: 0, total: 0 };
         stats[lesson.subject].total += 1;
       });
+
       (lessonProgress || []).forEach(
         (item: { lesson_id: string; status: string }) => {
           const lesson = (lessons || []).find(
@@ -64,7 +76,7 @@ export default function SubjectsPage() {
       );
 
       setLessonStats(stats);
-    };
+    };;
 
     loadData();
 

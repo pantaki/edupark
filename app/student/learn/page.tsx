@@ -330,11 +330,11 @@ function LearnContent() {
       );
 
       if (lesson) {
+        // Find next lesson from ANY grade (not just current grade), for this subject
         const { data: nextLesson } = await supabase
           .from("lessons")
           .select("id")
           .eq("subject", subject)
-          .eq("grade", grade)
           .gt("order_num", lesson.order_num || 0)
           .order("order_num")
           .limit(1)
