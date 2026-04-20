@@ -141,7 +141,6 @@ function RoomContent() {
           "| data:",
           insertData,
         );
-        );
     }
 
     // Also save to quiz_sessions for history
