@@ -2,11 +2,11 @@
 // app/student/achievements/page.tsx
 
 import { useEffect, useState } from "react";
-import { useRouter }          from "next/navigation";
-import { useAppStore }        from "@/lib/store";
+import { useRouter } from "next/navigation";
 import { supabase }           from "@/lib/supabaseClient";
 import { StudentBottomNav }   from "@/components/shared/BottomNav";
 import { ArrowLeft }          from "lucide-react";
+import { useRequireChild } from "@/lib/useRequireChild";
 
 interface Achievement {
   id: string; name: string; description: string; emoji: string;
@@ -32,7 +32,7 @@ const CAT_LABEL: Record<string, string> = {
 
 export default function AchievementsPage() {
   const router = useRouter();
-  const { childSession } = useAppStore();
+  const { childSession, ready } = useRequireChild();
   const [earned,   setEarned]   = useState<EarnedAchievement[]>([]);
   const [allAchs,  setAllAchs]  = useState<Achievement[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -40,11 +40,12 @@ export default function AchievementsPage() {
   const [newAch,   setNewAch]   = useState<Achievement | null>(null); // pop-up
 
   useEffect(() => {
-    if (!childSession) { router.replace("/student/enter-code"); return; }
+    if (!ready || !childSession) return;
 
     Promise.all([
       supabase.from("achievements").select("*").order("rarity"),
-      supabase.from("child_achievements")
+      supabase
+        .from("child_achievements")
         .select("achievement_id, earned_at, achievements(*)")
         .eq("child_id", childSession.id),
     ]).then(([{ data: all }, { data: ea }]) => {
@@ -64,7 +65,7 @@ export default function AchievementsPage() {
       );
       setLoading(false);
     });
-  }, [childSession, router]);
+  }, [ready, childSession]);
 
   const earnedIds = new Set(earned.map(e => e.achievement_id));
 
@@ -74,7 +75,12 @@ export default function AchievementsPage() {
 
   const categories = ["all", ...Array.from(new Set(allAchs.map(a => a.category)))];
 
-  if (!childSession) return null;
+  if (!ready || !childSession)
+    return (
+      <div className="...">
+        <div className="text-5xl animate-bounce">...</div>
+      </div>
+    );
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-5xl animate-bounce">🏆</div>

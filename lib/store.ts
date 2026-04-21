@@ -1,3 +1,4 @@
+"use client";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -11,19 +12,17 @@ interface Child {
 }
 
 interface AppState {
-  // Auth
   userId: string | null;
   userRole: "parent" | "student" | null;
   userName: string | null;
-  // Student session (code-based)
   childSession: Child | null;
-  // Dark mode
   darkMode: boolean;
-  // Actions
+  _hasHydrated: boolean;
   setUser: (id: string, role: "parent" | "student", name: string) => void;
   setChildSession: (child: Child | null) => void;
   toggleDarkMode: () => void;
   logout: () => void;
+  setHasHydrated: (val: boolean) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -34,6 +33,7 @@ export const useAppStore = create<AppState>()(
       userName: null,
       childSession: null,
       darkMode: false,
+      _hasHydrated: false,
       setUser: (id, role, name) =>
         set({ userId: id, userRole: role, userName: name }),
       setChildSession: (child) => set({ childSession: child }),
@@ -45,6 +45,7 @@ export const useAppStore = create<AppState>()(
           userName: null,
           childSession: null,
         }),
+      setHasHydrated: (val) => set({ _hasHydrated: val }),
     }),
     {
       name: "hoc-vui-store",
@@ -52,6 +53,9 @@ export const useAppStore = create<AppState>()(
         childSession: state.childSession,
         darkMode: state.darkMode,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     },
   ),
 );

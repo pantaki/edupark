@@ -1,18 +1,19 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useAppStore } from "@/lib/store";
 import { supabase } from "@/lib/supabaseClient";
 import { StudentBottomNav } from "@/components/shared/BottomNav";
 import { SUBJECTS, AVATAR_EMOJI } from "@/lib/utils";
 import { Flame, Star, Target, ArrowLeft } from "lucide-react";
+import { useRequireChild } from "@/lib/useRequireChild";
+
 
 interface Progress { subject: string; accuracy: number; streak: number; xp: number; correct_questions: number; total_questions: number; }
 interface Session { id: string; subject: string; score: number; total: number; completed_at: string; }
 
 export default function ProgressPage() {
   const router = useRouter();
-  const { childSession } = useAppStore();
+  const { childSession, ready } = useRequireChild();
   const [progress, setProgress] = useState<Progress[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,7 +21,7 @@ export default function ProgressPage() {
   const sessionChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const loadProgress = async () => {
-    if (!childSession) return;
+     if (!ready || !childSession) return;
     const [{ data: prog }, { data: sess }] = await Promise.all([
       supabase.from("progress").select("*").eq("child_id", childSession.id),
       supabase
@@ -35,11 +36,7 @@ export default function ProgressPage() {
   };
 
   useEffect(() => {
-    if (!childSession) {
-      router.replace("/student/enter-code");
-      return;
-    }
-
+    if (!ready || !childSession) return;
     loadProgress().then(() => setLoading(false));
 
     if (progressChannelRef.current)
@@ -143,9 +140,14 @@ export default function ProgressPage() {
       if (sessionChannelRef.current)
         supabase.removeChannel(sessionChannelRef.current);
     };
-  }, [childSession, router]);
+  }, [ready, childSession]);
 
-  if (!childSession) return null;
+  if (!ready || !childSession)
+    return (
+      <div className="...">
+        <div className="text-5xl animate-bounce">...</div>
+      </div>
+    );
 
   const totalXp = progress.reduce((s, p) => s + (p.xp || 0), 0);
   const maxStreak = Math.max(0, ...progress.map(p => p.streak || 0));
