@@ -27,10 +27,19 @@ function buildPrompt(cfg: { subject: string; customSubject: string; grade: numbe
   return `Bạn là giáo viên tiểu học Việt Nam dạy môn ${subLabel}, lớp ${cfg.grade}.
 Tạo ĐÚNG ${cfg.count} câu hỏi trắc nghiệm cấp độ "${lvLabel}"${cfg.chapter ? ` cho chủ đề "${cfg.chapter}"` : ""}.
 
-Yêu cầu:
+Yêu cầu về nội dung:
 - Mỗi câu có ĐÚNG 4 lựa chọn (A, B, C, D)
 - Chỉ có 1 đáp án đúng
-- Ngôn ngữ phù hợp lớp ${cfg.grade}${cfg.content ? `\n- Dựa trên nội dung: "${cfg.content}"` : ""}
+- Ngôn ngữ: Phải phù hợp tuyệt đối với khả năng đọc hiểu của học sinh lớp ${cfg.grade}${
+    cfg.content
+      ? `\n
+- Nếu có nội dung này: Hãy dựa vào nội dung sau đây để đặt câu hỏi: "${cfg.content}"`
+      : ""
+  }
+- Nếu là Lớp 1-2: Sử dụng các ví dụ trực quan như con vật, đồ vật, trái cây. Câu hỏi ngắn gọn.
+- Nếu là Lớp 4-5: Đưa vào các bài toán đố, tình huống thực tế hoặc yêu cầu suy luận 2 bước.
+- Đáp án nhiễu: Phải có tính logic, dựa trên các lỗi sai thường gặp của học sinh tiểu học.
+Yêu cầu kỹ thuật:
 - CHỈ trả về JSON hợp lệ
 - KHÔNG markdown
 - KHÔNG giải thích ngoài JSON
