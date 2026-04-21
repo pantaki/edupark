@@ -21,6 +21,12 @@ export function usePet(childId: string | undefined) {
   const [levelUpAnim, setLevelUpAnim] = useState(false);
   const prevLevel = useRef(1);
 
+  type PetProgress = {
+    xp: number;
+    level: number;
+    xp_to_next: number;
+  };
+
   // ── Fetch pet (create if not exists) ──────────────────────────
   const fetchPet = useCallback(async () => {
     if (!childId) return;
@@ -119,18 +125,32 @@ export function usePet(childId: string | undefined) {
   // ── Helper: gain XP + handle level up ─────────────────────────
   async function gainXp(xpGain: number) {
     if (!pet || !childId) return;
-    const { xp, level, xp_to_next } = addXpToPet(pet, xpGain);
-    const didLevelUp = level > pet.level;
+
+    const progress = addXpToPet(pet, xpGain);
+
+    const didLevelUp = progress.level > pet.level;
     const coinBonus = didLevelUp ? COIN_REWARDS.pet_levelup : 0;
+
     const patch: Partial<Pet> = {
-      xp, level, xp_to_next,
+      ...progress,
       coins: pet.coins + coinBonus,
       happiness: Math.min(100, pet.happiness + (didLevelUp ? 20 : 0)),
     };
+
     await updatePet(patch);
+
     if (didLevelUp) {
-      await supabase.from("coin_ledger").insert({ child_id: childId, delta: coinBonus, reason: "pet_levelup" });
-      await supabase.from("pet_activities").insert({ child_id: childId, activity: "level_up", xp_gained: xpGain });
+      await supabase.from("coin_ledger").insert({
+        child_id: childId,
+        delta: coinBonus,
+        reason: "pet_levelup",
+      });
+
+      await supabase.from("pet_activities").insert({
+        child_id: childId,
+        activity: "level_up",
+        xp_gained: xpGain,
+      });
     }
   }
 
