@@ -41,6 +41,12 @@ export interface InventoryItem extends ShopItem {
   equipped: boolean;
 }
 
+export type PetProgress = {
+  xp: number;
+  level: number;
+  xp_to_next: number;
+};
+
 // ── Species config ─────────────────────────────────────────────
 export const SPECIES_CONFIG: Record<PetSpecies, {
   label: string;
@@ -181,7 +187,7 @@ export function xpForNextLevel(level: number): number {
   return Math.floor(100 * Math.pow(1.4, level - 1));
 }
 
-export function addXpToPet(pet: Pet, xpGain: number): Partial<Pet> {
+export function addXpToPet(pet: Pet, xpGain: number): PetProgress {
   let { xp, level, xp_to_next } = pet;
   xp += xpGain;
   while (xp >= xp_to_next) {
