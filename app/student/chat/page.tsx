@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { useAppStore } from "@/lib/store";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { StudentBottomNav } from "@/components/shared/BottomNav";
 import { AVATAR_EMOJI } from "@/lib/utils";
 import { Send, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
+import { useRequireChild } from "@/lib/useRequireChild";
+
 
 interface Message {
   id: string; content: string; type: string; created_at: string;
@@ -17,7 +18,7 @@ const EMOJIS = ["😊","🎉","💪","❤️","⭐","🔥","👍","🤩","😂",
 
 export default function StudentChatPage() {
   const router = useRouter();
-  const { childSession } = useAppStore();
+  const { childSession, ready } = useRequireChild();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
@@ -33,10 +34,7 @@ export default function StudentChatPage() {
     );
 
   useEffect(() => {
-    if (!childSession) {
-      router.replace("/student/enter-code");
-      return;
-    }
+    if (!ready || !childSession) return;
 
     supabase
       .from("messages")
@@ -76,7 +74,7 @@ export default function StudentChatPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [childSession, router]);
+  }, [ready, childSession]);
 
   async function sendMessage(content: string, type = "text") {
     if (!content.trim() || !childSession) return;
@@ -121,7 +119,12 @@ export default function StudentChatPage() {
     setMessages((prev) => prev.map((m) => (m.id === tempId ? data : m)));
   }
 
-  if (!childSession) return null;
+  if (!ready || !childSession)
+    return (
+      <div className="...">
+        <div className="text-5xl animate-bounce">...</div>
+      </div>
+    );
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-900 pb-20">
@@ -233,7 +236,7 @@ export default function StudentChatPage() {
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              e.stopPropagation();
+              // e.stopPropagation();
               sendMessage(input);
             }
           }}

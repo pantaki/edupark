@@ -3,7 +3,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAppStore } from "@/lib/store";
 import { StudentBottomNav } from "@/components/shared/BottomNav";
 import PetAvatar from "@/components/pet/PetAvatar";
 import PetStatusBar from "@/components/pet/PetStatusBar";
@@ -13,12 +12,13 @@ import type { InventoryItem } from "@/lib/pet";
 import { ShoppingBag, Settings, Heart, Star, Zap } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useRequireChild } from "@/lib/useRequireChild";
 
 type Tab = "home" | "feed" | "dress";
 
 export default function PetRoomPage() {
   const router = useRouter();
-  const { childSession } = useAppStore();
+  const { childSession, ready } = useRequireChild();
   const { pet, inventory, loading, levelUpAnim, feedPet, touchPet, equipItem } = usePet(childSession?.id);
   const [tab, setTab] = useState<Tab>("home");
   const [feeding, setFeeding] = useState(false);
@@ -26,15 +26,18 @@ export default function PetRoomPage() {
   const [newName, setNewName] = useState("");
 
   useEffect(() => {
+    if (!ready) return;
     if (!childSession) router.replace("/student/enter-code");
-  }, [childSession, router]);
+  }, [ready]);
 
-  if (!childSession || loading || !pet) {
+  if (!ready || !childSession || loading || !pet) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 to-purple-50">
         <div className="text-center">
           <div className="text-7xl animate-bounce mb-4">🐾</div>
-          <p className="font-display font-black text-slate-500 text-xl">Đang gọi pet...</p>
+          <p className="font-display font-black text-slate-500 text-xl">
+            Đang gọi pet...
+          </p>
         </div>
       </div>
     );

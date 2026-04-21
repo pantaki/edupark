@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAppStore } from "@/lib/store";
+import { useRequireChild } from "@/lib/useRequireChild";
 import { supabase } from "@/lib/supabaseClient";
 import { SUBJECTS } from "@/lib/utils";
 import {
@@ -65,17 +65,22 @@ function StarRow({ count, size = "sm" }: { count: number; size?: "sm" | "md" }) 
   );
 }
 
+const LOADING_UI = (
+  <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="text-6xl animate-bounce">📚</div>
+  </div>
+);
+
 function JourneyContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const { childSession } = useAppStore();
+  const { childSession, ready } = useRequireChild();
 
   const subject = params.get("subject") || "math";
   const grade = parseInt(
     params.get("grade") || String(childSession?.grade || 3),
   );
 
-  // Tách bài chuẩn và bài phụ huynh
   const [standardLessons, setStandardLessons] = useState<Lesson[]>([]);
   const [parentLessons, setParentLessons] = useState<Lesson[]>([]);
   const [progressMap, setProgressMap] = useState<
@@ -90,7 +95,6 @@ function JourneyContent() {
 
   const load = useCallback(async () => {
     if (!childSession) return;
-
     const [{ data: prog }, { data: pr }, { data: gradeLessons }] =
       await Promise.all([
         supabase
@@ -103,7 +107,6 @@ function JourneyContent() {
           .eq("child_id", childSession.id)
           .eq("subject", subject)
           .maybeSingle(),
-        // Fetch tất cả bài của grade + subject, kể cả is_parent_created
         supabase
           .from("lessons")
           .select("*")
@@ -111,19 +114,14 @@ function JourneyContent() {
           .eq("grade", grade)
           .order("order_num"),
       ]);
-
     setStreak(pr?.streak || 0);
-
     const pMap: Record<string, LessonProgress> = {};
     (prog || []).forEach((p: LessonProgress) => {
       pMap[p.lesson_id] = p;
     });
-
     const allLessons: Lesson[] = gradeLessons || [];
     const standard = allLessons.filter((l) => !l.is_parent_created);
     const gifts = allLessons.filter((l) => l.is_parent_created);
-
-    // Auto-unlock bài chuẩn đầu tiên
     if (standard.length > 0) {
       const firstId = standard[0].id;
       if (!pMap[firstId]) {
@@ -141,7 +139,6 @@ function JourneyContent() {
           );
       }
     }
-
     setStandardLessons(standard);
     setParentLessons(gifts);
     setProgressMap(pMap);
@@ -149,35 +146,27 @@ function JourneyContent() {
   }, [childSession, subject, grade]);
 
   useEffect(() => {
-    if (!childSession) {
-      router.replace("/student/enter-code");
-      return;
-    }
+    if (!ready) return;
     load();
-  }, [childSession, load, router]);
+  }, [ready, load]);
 
   function getStatus(
     lessonId: string,
     isGift = false,
   ): "locked" | "available" | "done" {
-    if (isGift) {
-      // Bài phụ huynh: luôn available trừ khi đã done
+    if (isGift)
       return progressMap[lessonId]?.status === "done" ? "done" : "available";
-    }
     return progressMap[lessonId]?.status || "locked";
   }
-  function getStars(lessonId: string): number {
+  function getStars(lessonId: string) {
     return progressMap[lessonId]?.stars || 0;
   }
 
-  // Chỉ tính stats từ bài chuẩn (không tính bài phụ huynh)
   const totalDone = standardLessons.filter(
     (l) => getStatus(l.id) === "done",
   ).length;
   const totalLessons = standardLessons.length;
   const totalStars = standardLessons.reduce((s, l) => s + getStars(l.id), 0);
-
-  // Group bài chuẩn theo chapter
   const chapters = standardLessons.reduce<Record<string, Lesson[]>>(
     (acc, l) => {
       const ch = l.chapter || "Chương 1";
@@ -188,14 +177,8 @@ function JourneyContent() {
     {},
   );
 
-  if (loading)
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-6xl animate-bounce">📚</div>
-      </div>
-    );
+  if (!ready || loading) return LOADING_UI;
 
-  // Shared lesson node renderer
   function LessonNode({
     lesson,
     idx,
@@ -209,12 +192,10 @@ function JourneyContent() {
     const stars = getStars(lesson.id);
     const isLeft = idx % 2 === 0;
     const isActive = activeLesson === lesson.id;
-
     return (
       <div
         className={`flex items-center gap-4 ${isLeft ? "flex-row" : "flex-row-reverse"}`}
       >
-        {/* Node circle */}
         <button
           className={`relative flex-shrink-0 w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90
             ${
@@ -229,17 +210,13 @@ function JourneyContent() {
                     : "bg-slate-200 shadow-inner"
             }`}
           onClick={() => {
-            if (isGift) {
+            if (isGift)
               setMascot(
                 status === "done" ? MASCOT_MOODS.done : MASCOT_MOODS.gift,
               );
-            } else if (status === "locked") {
-              setMascot(MASCOT_MOODS.locked);
-            } else if (status === "done") {
-              setMascot(MASCOT_MOODS.done);
-            } else {
-              setMascot(MASCOT_MOODS.go);
-            }
+            else if (status === "locked") setMascot(MASCOT_MOODS.locked);
+            else if (status === "done") setMascot(MASCOT_MOODS.done);
+            else setMascot(MASCOT_MOODS.go);
             setActiveLesson(isActive ? null : lesson.id);
           }}
         >
@@ -255,14 +232,11 @@ function JourneyContent() {
           ) : (
             <Lock className="w-6 h-6 text-slate-400" />
           )}
-
-          {/* Pulse for available */}
           {status === "available" && (
             <span className="absolute inset-0 rounded-full animate-ping bg-white/30" />
           )}
         </button>
 
-        {/* Card */}
         <div
           className={`flex-1 transition-all duration-200 ${isActive ? "scale-[1.02]" : ""}`}
         >
@@ -305,8 +279,6 @@ function JourneyContent() {
                   </div>
                 )}
               </div>
-
-              {/* Action button — hiện khi active */}
               {(status !== "locked" || isGift) && isActive && (
                 <button
                   onClick={() =>
@@ -338,20 +310,17 @@ function JourneyContent() {
       className="min-h-screen pb-24"
       style={{ background: "linear-gradient(180deg, #f0f4ff 0%, #faf9ff 60%)" }}
     >
-      {/* ── Header ── */}
       <div
         className={`bg-gradient-to-r ${subjectInfo.color} px-4 pt-12 pb-16 relative overflow-hidden`}
       >
         <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-white/10 -translate-y-10 translate-x-10" />
         <div className="absolute bottom-0 left-10 w-24 h-24 rounded-full bg-white/10 translate-y-8" />
-
         <button
           onClick={() => router.back()}
           className="flex items-center gap-2 text-white/80 mb-4 active:scale-95 transition-all"
         >
           <ArrowLeft className="w-5 h-5" /> Quay lại
         </button>
-
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -380,13 +349,11 @@ function JourneyContent() {
                   {totalStars} sao
                 </span>
               </div>
-              {/* Chỉ đếm bài chuẩn */}
               <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur rounded-2xl px-3 py-1.5">
                 <span className="text-white font-extrabold text-sm">
                   {totalDone}/{totalLessons} bài
                 </span>
               </div>
-              {/* Hiện số quà nếu có */}
               {parentLessons.length > 0 && (
                 <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur rounded-2xl px-3 py-1.5">
                   <Gift className="w-4 h-4 text-pink-200" />
@@ -398,8 +365,6 @@ function JourneyContent() {
             </div>
           </div>
         </div>
-
-        {/* Progress bar — chỉ tính bài chuẩn */}
         <div className="mt-4">
           <div className="h-3 bg-white/20 rounded-full overflow-hidden">
             <div
@@ -415,7 +380,6 @@ function JourneyContent() {
         </div>
       </div>
 
-      {/* ── Mascot ── */}
       <div className="px-4 mt-2">
         <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/60 px-4 py-3 flex items-center gap-3 border border-slate-100">
           <span className="text-3xl">{mascot.emoji}</span>
@@ -425,7 +389,6 @@ function JourneyContent() {
         </div>
       </div>
 
-      {/* ── Quà từ phụ huynh ── */}
       {parentLessons.length > 0 && (
         <div className="px-4 pt-6">
           <div className="flex items-center gap-3 mb-4">
@@ -435,7 +398,6 @@ function JourneyContent() {
             </span>
             <div className="flex-1 h-px bg-pink-200" />
           </div>
-
           <div className="relative">
             <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-pink-100 -translate-x-1/2 z-0" />
             <div className="space-y-6 relative z-10">
@@ -452,7 +414,6 @@ function JourneyContent() {
         </div>
       )}
 
-      {/* ── Bài học chuẩn theo chương ── */}
       <div className="px-4 pt-6 space-y-10">
         {Object.entries(chapters).map(([chapterName, chapterLessons]) => (
           <div key={chapterName}>
@@ -463,23 +424,16 @@ function JourneyContent() {
               </span>
               <div className="flex-1 h-px bg-slate-200" />
             </div>
-
             <div className="relative">
               <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-200 -translate-x-1/2 z-0" />
               <div className="space-y-6 relative z-10">
                 {chapterLessons.map((lesson, idx) => (
-                  <LessonNode
-                    key={lesson.id}
-                    lesson={lesson}
-                    idx={idx}
-                    isGift={false}
-                  />
+                  <LessonNode key={lesson.id} lesson={lesson} idx={idx} />
                 ))}
               </div>
             </div>
           </div>
         ))}
-
         {standardLessons.length === 0 && parentLessons.length === 0 && (
           <div className="text-center py-16">
             <div className="text-6xl mb-4">📭</div>

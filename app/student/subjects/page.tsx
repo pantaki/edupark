@@ -1,15 +1,14 @@
 "use client";
-// app/student/subjects/page.tsx — fix: tiến độ tính từ bài hoàn thành, không phải accuracy
-
 import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { useAppStore } from "@/lib/store";
+import { useRequireChild } from "@/lib/useRequireChild";
 import { StudentBottomNav } from "@/components/shared/BottomNav";
 import { SUBJECTS, AVATAR_EMOJI } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
 import { Flame, Star, LogOut, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 interface Progress {
   subject: string;
@@ -17,7 +16,6 @@ interface Progress {
   streak: number;
   xp: number;
 }
-// Tiến độ bài học thực tế theo môn
 interface LessonProgress {
   subject: string;
   done: number;
@@ -45,9 +43,16 @@ interface Achievement {
 const ZPD_THRESHOLD = 60;
 const BRAIN_BREAK_THRESHOLD = 25;
 
+const LOADING_UI = (
+  <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-50 to-slate-50">
+    <div className="text-6xl animate-bounce">📚</div>
+  </div>
+);
+
 export default function SubjectsPage() {
   const router = useRouter();
-  const { childSession, setChildSession } = useAppStore();
+  const { childSession, ready } = useRequireChild();
+  const { setChildSession } = useAppStore();
   const [progress, setProgress] = useState<Progress[]>([]);
   const [lessonProgress, setLessonProgress] = useState<
     Record<string, LessonProgress>
@@ -60,13 +65,9 @@ export default function SubjectsPage() {
   const studyStartRef = useRef<number>(Date.now());
 
   useEffect(() => {
-    if (!childSession) {
-      router.replace("/student/enter-code");
-      return;
-    }
+    if (!ready || !childSession) return;
 
     const grade = childSession.grade;
-
     Promise.all([
       supabase.from("progress").select("*").eq("child_id", childSession.id),
       supabase
@@ -82,13 +83,11 @@ export default function SubjectsPage() {
         .eq("child_id", childSession.id)
         .order("earned_at", { ascending: false })
         .limit(3),
-      // Tất cả bài học của grade này
       supabase
         .from("lessons")
         .select("id, subject")
         .eq("grade", grade)
         .eq("is_parent_created", false),
-      // Bài đã hoàn thành của child
       supabase
         .from("child_lesson_progress")
         .select("lesson_id, status")
@@ -117,20 +116,16 @@ export default function SubjectsPage() {
             };
           }),
         );
-
-        // Tính tiến độ thực tế theo môn: số bài done / tổng bài
         const doneSet = new Set(
           (doneLessons || []).map((d: any) => d.lesson_id),
         );
         const bySubject: Record<string, { done: number; total: number }> = {};
-
         (allLessons || []).forEach((l: any) => {
           if (!bySubject[l.subject])
             bySubject[l.subject] = { done: 0, total: 0 };
           bySubject[l.subject].total++;
           if (doneSet.has(l.id)) bySubject[l.subject].done++;
         });
-
         const lpMap: Record<string, LessonProgress> = {};
         Object.entries(bySubject).forEach(([subject, { done, total }]) => {
           lpMap[subject] = {
@@ -153,7 +148,6 @@ export default function SubjectsPage() {
       );
     tick();
     const id = setInterval(tick, 30000);
-
     const brainTimer = setInterval(() => {
       const mins = (Date.now() - studyStartRef.current) / 60000;
       if (mins >= BRAIN_BREAK_THRESHOLD) {
@@ -161,19 +155,16 @@ export default function SubjectsPage() {
         clearInterval(brainTimer);
       }
     }, 60000);
-
     return () => {
       clearInterval(id);
       clearInterval(brainTimer);
     };
-  }, [childSession, router]);
+  }, [ready, childSession]);
 
-  if (!childSession) return null;
+  if (!ready || !childSession) return LOADING_UI;
 
   const totalXp = progress.reduce((s, p) => s + (p.xp || 0), 0);
   const maxStreak = Math.max(0, ...progress.map((p) => p.streak || 0));
-
-  // ZPD: môn yếu nhất theo accuracy quiz (vẫn dùng accuracy để đo hiểu bài)
   const weakSubject = SUBJECTS.find((s) => {
     const p = progress.find((pr) => pr.subject === s.id);
     return p && p.accuracy < ZPD_THRESHOLD;
@@ -190,7 +181,6 @@ export default function SubjectsPage() {
       .from("assignments")
       .update({ status: "seen", seen_at: new Date().toISOString() })
       .eq("id", gift.id);
-    // Cập nhật status local thay vì xóa khỏi list
     setAssignments((prev) =>
       prev.map((a) => (a.id === gift.id ? { ...a, status: "seen" } : a)),
     );
@@ -205,7 +195,6 @@ export default function SubjectsPage() {
 
   return (
     <div className="screen-container bg-gradient-to-b from-blue-50 to-slate-50">
-      {/* Brain break modal */}
       {showBrainBreak && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center">
           <div className="bg-white rounded-t-4xl w-full max-w-lg p-8 text-center shadow-2xl">
@@ -242,7 +231,6 @@ export default function SubjectsPage() {
         </div>
       )}
 
-      {/* Gift detail modal */}
       {showGiftDetail && (
         <div
           className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6"
@@ -284,7 +272,6 @@ export default function SubjectsPage() {
         </div>
       )}
 
-      {/* Status bar */}
       <div className="flex justify-between items-center px-4 pt-4 pb-2">
         <span className="font-bold text-slate-400 text-sm">{clock}</span>
         <div className="flex items-center gap-2">
@@ -305,7 +292,6 @@ export default function SubjectsPage() {
         </div>
       </div>
 
-      {/* Hero greeting */}
       <div className="px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
@@ -332,7 +318,6 @@ export default function SubjectsPage() {
       </div>
 
       <div className="px-4 pt-1 pb-4 space-y-4">
-        {/* Gift inbox */}
         {assignments.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
@@ -344,7 +329,8 @@ export default function SubjectsPage() {
                 <button
                   key={gift.id}
                   onClick={() => setShowGiftDetail(gift)}
-                  className={`w-full flex items-center gap-3 rounded-3xl p-3.5 border-2 active:scale-[0.98] transition-all shadow-sm ${isSeen ? "bg-slate-50 border-slate-200" : "bg-gradient-to-r from-pink-50 to-purple-50 border-pink-200"}`}
+                  className={`w-full flex items-center gap-3 rounded-3xl p-3.5 border-2 active:scale-[0.98] transition-all shadow-sm
+                    ${isSeen ? "bg-slate-50 border-slate-200" : "bg-gradient-to-r from-pink-50 to-purple-50 border-pink-200"}`}
                 >
                   <span
                     className={`text-3xl flex-shrink-0 ${isSeen ? "grayscale opacity-60" : ""}`}
@@ -374,7 +360,6 @@ export default function SubjectsPage() {
           </div>
         )}
 
-        {/* Recent achievements */}
         {recentAchs.length > 0 && (
           <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-3xl p-3.5 border-2 border-yellow-200">
             <div className="flex items-center justify-between mb-2">
@@ -401,7 +386,6 @@ export default function SubjectsPage() {
           </div>
         )}
 
-        {/* ZPD suggestion */}
         {weakSubject && (
           <Link
             href={`/student/journey?subject=${weakSubject.id}&grade=${childSession.grade}`}
@@ -420,7 +404,6 @@ export default function SubjectsPage() {
           </Link>
         )}
 
-        {/* Subject grid — tiến độ từ lesson completion */}
         <div>
           <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-3 px-1">
             🗺️ Khám phá môn học
@@ -447,8 +430,6 @@ export default function SubjectsPage() {
                   <h2 className="font-display font-black text-xl text-white z-10">
                     {s.label}
                   </h2>
-
-                  {/* Tiến độ thực: bài hoàn thành / tổng bài */}
                   <div className="w-full z-10">
                     <div className="flex justify-between mb-1">
                       <span className="text-white/70 text-xs font-bold">
@@ -465,7 +446,6 @@ export default function SubjectsPage() {
                       />
                     </div>
                   </div>
-
                   {isWeak && (
                     <span className="absolute top-2 left-2 bg-yellow-300 text-yellow-900 text-xs font-extrabold px-2 py-0.5 rounded-full z-10">
                       💡 Ôn lại!
@@ -477,7 +457,6 @@ export default function SubjectsPage() {
           </div>
         </div>
 
-        {/* Quick actions */}
         <div className="grid grid-cols-3 gap-2">
           <Link
             href="/student/pet"
@@ -508,7 +487,6 @@ export default function SubjectsPage() {
           </Link>
         </div>
 
-        {/* Grade display */}
         <div>
           <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2 px-1">
             Lớp của bé
@@ -518,11 +496,7 @@ export default function SubjectsPage() {
               <div
                 key={g}
                 className={`flex-1 py-2.5 rounded-2xl font-extrabold text-sm text-center border-2 transition-all
-                  ${
-                    childSession.grade === g
-                      ? "bg-blue-500 border-blue-500 text-white shadow-lg shadow-blue-200"
-                      : "bg-white border-slate-200 text-slate-400"
-                  }`}
+                ${childSession.grade === g ? "bg-blue-500 border-blue-500 text-white shadow-lg shadow-blue-200" : "bg-white border-slate-200 text-slate-400"}`}
               >
                 {g}
               </div>
@@ -530,7 +504,6 @@ export default function SubjectsPage() {
           </div>
         </div>
       </div>
-
       <StudentBottomNav />
     </div>
   );
