@@ -107,6 +107,30 @@ function StarRow({ count, size = 10 }: { count: number; size?: number }) {
   );
 }
 
+/* ── Calculate Streak based on daily check-in ── */
+function calculateStreak(lastUpdatedAt: string, currentStreak: number): number {
+  const lastDate = new Date(lastUpdatedAt);
+  const today = new Date();
+  
+  // Reset to same day for comparison (ignoring time)
+  const lastDateOnly = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  
+  // Calculate days difference
+  const daysDiff = Math.floor((todayOnly.getTime() - lastDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+  
+  if (daysDiff === 0) {
+    // Same day, keep current streak
+    return currentStreak;
+  } else if (daysDiff === 1) {
+    // Yesterday, increment streak (continue the chain)
+    return currentStreak + 1;
+  } else {
+    // More than 1 day ago, reset streak to 1
+    return 1;
+  }
+}
+
 function LearnContent() {
   const router = useRouter();
   const params = useSearchParams();
@@ -240,7 +264,7 @@ function LearnContent() {
     // Update progress: first check if exists, then update or insert
     const { data: existing, error: getError } = await supabase
       .from("progress")
-      .select("id,xp,streak")
+      .select("id,xp,streak,updated_at")
       .eq("child_id", childSession.id)
       .eq("subject", subject)
       .maybeSingle();
@@ -251,12 +275,19 @@ function LearnContent() {
     }
 
     if (existing) {
-      // Update: accumulate xp and take max streak
+      // Update: accumulate xp and calculate streak based on daily check-in
+      const newStreak = calculateStreak(
+        existing.updated_at,
+        existing.streak || 0,
+      );
+      // If today's session has better streak in a single go, use that instead
+      const finalStreak = Math.max(newStreak, maxStreak);
+
       const { error: updateError } = await supabase
         .from("progress")
         .update({
           accuracy: acc,
-          streak: Math.max(existing.streak || 0, maxStreak),
+          streak: finalStreak,
           xp: (existing.xp || 0) + sessionXp,
           total_questions: total,
           correct_questions: score,
@@ -270,16 +301,18 @@ function LearnContent() {
           subject,
           "| acc:",
           acc,
+          "| streak:",
+          finalStreak,
           "| xp:",
           (existing.xp || 0) + sessionXp,
         );
     } else {
-      // Insert new
+      // Insert new: first day is streak = 1
       console.log("Inserting new progress with:", {
         child_id: childSession.id,
         subject,
         accuracy: acc,
-        streak: maxStreak,
+        streak: 1,
         xp: sessionXp,
         total_questions: total,
         correct_questions: score,
@@ -291,7 +324,7 @@ function LearnContent() {
           child_id: childSession.id,
           subject,
           accuracy: acc,
-          streak: maxStreak,
+          streak: 1,
           xp: sessionXp,
           total_questions: total,
           correct_questions: score,
