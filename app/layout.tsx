@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "sonner";
+import { DarkModeProvider } from "@/components/DarkModeProvider";
 
 export const metadata: Metadata = {
   title: "Học Vui ⭐ – Học thật vui!",
@@ -11,10 +12,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="vi">
       <body>
-        <div className="app-frame">
-          {children}
-        </div>
-        <Toaster position="top-center" richColors />
+        <DarkModeProvider>
+          <div className="app-frame">{children}</div>
+          <Toaster position="top-center" richColors />
+        </DarkModeProvider>
       </body>
     </html>
   );

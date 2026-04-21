@@ -8,10 +8,12 @@
   * { -webkit-tap-highlight-color: transparent; }
   html { font-family: 'Nunito', sans-serif; scroll-behavior: smooth; }
   body {
-    @apply text-slate-800;
+    @apply text-slate-800 dark:text-slate-100;
     font-family: 'Nunito', sans-serif;
     overscroll-behavior: none;
     background: #dde3f0;
+    @apply dark:bg-slate-950;
+    transition: background-color 0.3s ease;
   }
   h1, h2, h3 { font-family: 'Baloo 2', cursive; }
 }
@@ -23,37 +25,40 @@
   min-height: 100vh;
   margin: 0 auto;
   background: #f8fafc;
+  @apply dark:bg-slate-900;
   position: relative;
   box-shadow: 0 0 60px rgba(0,0,0,0.15);
+  @apply dark:shadow-2xl;
+  transition: background-color 0.3s ease;
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-gradient-to-r from-blue-500 to-blue-600 text-white font-extrabold rounded-2xl px-6 py-4 text-lg shadow-lg shadow-blue-200 active:scale-95 transition-all duration-150 hover:shadow-xl w-full flex items-center justify-center gap-2;
+    @apply bg-gradient-to-r from-blue-500 to-blue-600 text-white font-extrabold rounded-2xl px-6 py-4 text-lg shadow-lg shadow-blue-200 active:scale-95 transition-all duration-150 hover:shadow-xl w-full flex items-center justify-center gap-2 dark:shadow-blue-900;
   }
   .btn-secondary {
-    @apply bg-white text-slate-700 font-extrabold rounded-2xl px-6 py-4 text-lg shadow-md border-2 border-slate-200 active:scale-95 transition-all duration-150 w-full;
+    @apply bg-white text-slate-700 font-extrabold rounded-2xl px-6 py-4 text-lg shadow-md border-2 border-slate-200 active:scale-95 transition-all duration-150 w-full dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700;
   }
   .btn-fun {
     @apply font-extrabold rounded-2xl px-6 py-4 text-lg active:scale-95 transition-all duration-150 w-full shadow-lg;
   }
   .card {
-    @apply bg-white rounded-3xl shadow-sm border border-slate-100 p-4;
+    @apply bg-white rounded-3xl shadow-sm border border-slate-100 p-4 dark:bg-slate-800 dark:border-slate-700;
   }
   .card-hover {
     @apply card hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer;
   }
   .input-field {
-    @apply w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3.5 text-base font-bold focus:outline-none focus:border-blue-400 focus:bg-white transition-all duration-150;
+    @apply w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3.5 text-base font-bold focus:outline-none focus:border-blue-400 focus:bg-white transition-all duration-150 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:focus:bg-slate-600 dark:focus:border-blue-500;
   }
   .badge {
     @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-extrabold;
   }
   .screen-container {
-    @apply min-h-screen bg-slate-50 pb-20;
+    @apply min-h-screen bg-slate-50 pb-20 dark:bg-slate-900;
   }
   .page-header {
-    @apply sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 py-3 flex items-center gap-3;
+    @apply sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 py-3 flex items-center gap-3 dark:bg-slate-800/90 dark:border-slate-700;
   }
 }
 

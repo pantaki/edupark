@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/lib/store";
 import { StudentBottomNav } from "@/components/shared/BottomNav";
+import { DarkModeToggle } from "@/components/shared/DarkModeToggle";
 import { SUBJECTS, AVATAR_EMOJI } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
 import { Flame, Star, LogOut } from "lucide-react";
@@ -98,48 +99,65 @@ export default function SubjectsPage() {
   }
 
   return (
-    <div className="screen-container bg-slate-50">
+    <div className="screen-container bg-slate-50 dark:bg-slate-900">
       {/* Status bar */}
       <div className="flex justify-between items-center px-4 pt-4 pb-2">
-        <span className="font-bold text-slate-400 text-sm">{clock}</span>
+        <span className="font-bold text-slate-400 dark:text-slate-500 text-sm">
+          {clock}
+        </span>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-orange-100 rounded-xl px-2.5 py-1">
+          <div className="flex items-center gap-1 bg-orange-100 dark:bg-orange-900/30 rounded-xl px-2.5 py-1">
             <Flame className="w-4 h-4 text-orange-500" />
-            <span className="font-extrabold text-orange-700 text-sm">{maxStreak}</span>
+            <span className="font-extrabold text-orange-700 dark:text-orange-400 text-sm">
+              {maxStreak}
+            </span>
           </div>
-          <div className="flex items-center gap-1 bg-yellow-100 rounded-xl px-2.5 py-1">
+          <div className="flex items-center gap-1 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl px-2.5 py-1">
             <Star className="w-4 h-4 text-yellow-500" />
-            <span className="font-extrabold text-yellow-700 text-sm">{totalXp}</span>
+            <span className="font-extrabold text-yellow-700 dark:text-yellow-400 text-sm">
+              {totalXp}
+            </span>
           </div>
+          <DarkModeToggle />
         </div>
       </div>
 
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center text-2xl">
+          <div className="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-2xl">
             {AVATAR_EMOJI[childSession.avatar] || "🐱"}
           </div>
           <div>
-            <h1 className="font-display font-black text-xl text-slate-800">Chào {childSession.name}! 👋</h1>
-            <p className="text-slate-500 text-sm font-semibold">Hôm nay muốn học gì nào?</p>
+            <h1 className="font-display font-black text-xl text-slate-800 dark:text-white">
+              Chào {childSession.name}! 👋
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold">
+              Hôm nay muốn học gì nào?
+            </p>
           </div>
         </div>
-        <button onClick={handleLogout} className="p-2 rounded-xl bg-slate-100 active:scale-90 transition-all">
-          <LogOut className="w-5 h-5 text-slate-500" />
+        <button
+          onClick={handleLogout}
+          className="p-2 rounded-xl bg-slate-100 dark:bg-slate-700 active:scale-90 transition-all"
+        >
+          <LogOut className="w-5 h-5 text-slate-500 dark:text-slate-400" />
         </button>
       </div>
 
       <div className="px-4 pt-2 pb-4 space-y-4">
         {/* Subject grid */}
         <div>
-          <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-3 px-1">Chọn môn học</p>
+          <p className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 px-1">
+            Chọn môn học
+          </p>
           <div className="grid grid-cols-2 gap-3">
             {SUBJECTS.map((s, i) => {
-              const prog = progress.find(p => p.subject === s.id);
+              const prog = progress.find((p) => p.subject === s.id);
               const acc = Math.round(prog?.accuracy || 0);
               const stat = lessonStats[s.id];
-              const isWide = i === SUBJECTS.length - 1 && SUBJECTS.length % 2 !== 0;
+              const isWide =
+                i === SUBJECTS.length - 1 && SUBJECTS.length % 2 !== 0;
               const showProgress = Boolean(prog || stat?.total);
               const percent = stat?.total
                 ? Math.round((stat.done / stat.total) * 100)
@@ -186,12 +204,16 @@ export default function SubjectsPage() {
 
         {/* Grade selector */}
         <div>
-          <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-3 px-1">Lớp của bạn</p>
+          <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-3 px-1">
+            Lớp của bạn
+          </p>
           <div className="flex gap-2">
-            {[1,2,3,4,5].map(g => (
-              <div key={g}
+            {[1, 2, 3, 4, 5].map((g) => (
+              <div
+                key={g}
                 className={`flex-1 py-3 rounded-2xl font-extrabold text-sm text-center border-2 transition-all
-                  ${childSession.grade === g ? "bg-blue-500 border-blue-500 text-white shadow-lg shadow-blue-200" : "bg-white border-slate-200 text-slate-500"}`}>
+                  ${childSession.grade === g ? "bg-blue-500 border-blue-500 text-white shadow-lg shadow-blue-200" : "bg-white border-slate-200 text-slate-500"}`}
+              >
                 {g}
               </div>
             ))}
@@ -199,12 +221,18 @@ export default function SubjectsPage() {
         </div>
 
         {/* Quick quiz join */}
-        <Link href="/quiz/join"
-          className="flex items-center gap-4 bg-gradient-to-r from-yellow-400 to-orange-400 rounded-3xl p-4 active:scale-95 transition-all shadow-lg shadow-yellow-200">
+        <Link
+          href="/quiz/join"
+          className="flex items-center gap-4 bg-gradient-to-r from-yellow-400 to-orange-400 rounded-3xl p-4 active:scale-95 transition-all shadow-lg shadow-yellow-200"
+        >
           <span className="text-4xl">🎮</span>
           <div>
-            <h3 className="font-display font-black text-lg text-yellow-900">Chơi Quiz cùng bạn!</h3>
-            <p className="text-yellow-800/70 text-sm font-semibold">Nhập mã phòng để vào chơi</p>
+            <h3 className="font-display font-black text-lg text-yellow-900">
+              Chơi Quiz cùng bạn!
+            </h3>
+            <p className="text-yellow-800/70 text-sm font-semibold">
+              Nhập mã phòng để vào chơi
+            </p>
           </div>
         </Link>
       </div>

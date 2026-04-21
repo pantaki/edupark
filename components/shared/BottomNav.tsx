@@ -1,8 +1,20 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart2, Users, MessageCircle, Plus, Home, Map, BookOpen, Gamepad2 } from "lucide-react";
+import {
+  BarChart2,
+  Users,
+  MessageCircle,
+  Plus,
+  Home,
+  Map,
+  BookOpen,
+  Gamepad2,
+  Moon,
+  Sun,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/lib/store";
 
 interface NavItem { href: string; icon: React.ReactNode; label: string; }
 
@@ -25,18 +37,30 @@ const studentNav: NavItem[] = [
 function NavBar({ items }: { items: NavItem[] }) {
   const path = usePathname();
   return (
-    <nav className="sticky bottom-0 z-50 bg-white border-t border-slate-100 flex items-stretch shadow-lg shadow-slate-200/50">
+    <nav className="absolute bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-100 flex items-stretch shadow-lg shadow-slate-200/50">
       {items.map((item) => {
         const active = path.startsWith(item.href);
         return (
-          <Link key={item.href} href={item.href}
+          <Link
+            key={item.href}
+            href={item.href}
             className={cn(
               "flex-1 flex flex-col items-center justify-center gap-1 py-3 transition-all duration-150 relative",
-              active ? "text-blue-600" : "text-slate-400"
-            )}>
-            <span className={cn("transition-transform duration-150", active && "scale-110")}>{item.icon}</span>
+              active ? "text-blue-600" : "text-slate-400",
+            )}
+          >
+            <span
+              className={cn(
+                "transition-transform duration-150",
+                active && "scale-110",
+              )}
+            >
+              {item.icon}
+            </span>
             <span className="text-xs font-extrabold">{item.label}</span>
-            {active && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-t-full bg-blue-500" />}
+            {active && (
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-t-full bg-blue-500" />
+            )}
           </Link>
         );
       })}

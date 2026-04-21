@@ -26,10 +26,30 @@ export const AVATAR_EMOJI: Record<string, string> = {
 };
 
 export const SUBJECTS = [
-  { id: "math", label: "Toán học", emoji: "🔢", color: "from-blue-500 to-purple-500" },
-  { id: "viet", label: "Tiếng Việt", emoji: "📖", color: "from-orange-500 to-red-500" },
-  { id: "eng", label: "Tiếng Anh", emoji: "🌍", color: "from-green-500 to-teal-500" },
-  { id: "science", label: "Khoa học", emoji: "🔬", color: "from-yellow-500 to-orange-500" },
+  {
+    id: "math",
+    label: "Toán học",
+    emoji: "🔢",
+    color: "from-blue-500 to-purple-500",
+  },
+  {
+    id: "viet",
+    label: "Tiếng Việt",
+    emoji: "📖",
+    color: "from-orange-500 to-red-500",
+  },
+  {
+    id: "eng",
+    label: "Tiếng Anh",
+    emoji: "🌍",
+    color: "from-green-500 to-teal-500",
+  },
+  {
+    id: "science",
+    label: "Khoa học",
+    emoji: "🔬",
+    color: "from-purple-500 to-purple-600",
+  },
 ];
 
 export const GRADES = [1, 2, 3, 4, 5];
