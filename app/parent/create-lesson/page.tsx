@@ -24,7 +24,7 @@ const LEVELS = [
 function buildPrompt(cfg: { subject: string; customSubject: string; grade: number; level: string; chapter: string; count: number; content: string }) {
   const subLabel = cfg.subject === "other" ? cfg.customSubject : SUBJECTS.find(s => s.id === cfg.subject)?.label;
   const lvLabel = LEVELS.find(l => l.id === cfg.level)?.label;
-  return `Bạn là giáo viên tiểu học Việt Nam dạy môn ${subLabel}, lớp ${cfg.grade}.
+  return `Bạn là giáo viên tiểu học 10 năm kinh nghiệm tại Việt Nam dạy môn ${subLabel}, lớp ${cfg.grade}.
 Tạo ĐÚNG ${cfg.count} câu hỏi trắc nghiệm cấp độ "${lvLabel}"${cfg.chapter ? ` cho chủ đề "${cfg.chapter}"` : ""}.
 
 Yêu cầu về nội dung:
@@ -160,6 +160,7 @@ export default function CreateLessonPage() {
           chapter: chapter.trim() || undefined,
           created_by: userId,
           is_builtin: false,
+          is_parent_created: true,
           order_num: Math.floor(Date.now() / 1000),
         })
         .select()

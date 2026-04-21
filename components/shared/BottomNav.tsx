@@ -70,9 +70,9 @@ const studentNav: NavItem[] = [
     label: "Huy hiệu",
   },
   {
-    href: "/student/progress",
-    icon: <BarChart2 className="w-5 h-5" />,
-    label: "Tiến độ",
+    href: "/student/chat",
+    icon: <MessageCircle className="w-5 h-5" />,
+    label: "Chat",
   },
 ];
 

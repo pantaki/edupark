@@ -205,9 +205,9 @@ export default function ChatPage() {
   );
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50">
+    <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-900 pb-20">
       {/* Header */}
-      <div className="page-header flex-shrink-0">
+      <div className="page-header flex-shrink-0 dark:bg-slate-800/90 dark:border-slate-700">
         <h1 className="font-display font-black text-xl flex-1">
           💬 Chat với con
         </h1>
