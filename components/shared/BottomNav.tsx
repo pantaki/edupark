@@ -1,4 +1,6 @@
 "use client";
+// components/shared/BottomNav.tsx — with Pet tab
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -10,11 +12,9 @@ import {
   Map,
   BookOpen,
   Gamepad2,
-  Moon,
-  Sun,
+  PawPrint,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAppStore } from "@/lib/store";
 
 interface NavItem { href: string; icon: React.ReactNode; label: string; }
 
@@ -27,11 +27,27 @@ const parentNav: NavItem[] = [
 ];
 
 const studentNav: NavItem[] = [
-  { href: "/student/subjects",  icon: <Home className="w-6 h-6" />,          label: "Trang chủ" },
-  { href: "/student/journey",   icon: <Map className="w-6 h-6" />,           label: "Bản đồ" },
-  { href: "/quiz/join",         icon: <Gamepad2 className="w-6 h-6" />,      label: "Quiz" },
-  { href: "/student/chat",      icon: <MessageCircle className="w-6 h-6" />, label: "Tin nhắn" },
-  { href: "/student/progress",  icon: <BarChart2 className="w-6 h-6" />,     label: "Tiến độ" },
+  {
+    href: "/student/subjects",
+    icon: <Home className="w-6 h-6" />,
+    label: "Học",
+  },
+  {
+    href: "/student/journey",
+    icon: <Map className="w-6 h-6" />,
+    label: "Bản đồ",
+  },
+  {
+    href: "/student/pet",
+    icon: <PawPrint className="w-6 h-6" />,
+    label: "Pet",
+  },
+  { href: "/quiz/join", icon: <Gamepad2 className="w-6 h-6" />, label: "Quiz" },
+  {
+    href: "/student/progress",
+    icon: <BarChart2 className="w-6 h-6" />,
+    label: "Tiến độ",
+  },
 ];
 
 function NavBar({ items }: { items: NavItem[] }) {
