@@ -1,5 +1,5 @@
 "use client";
-// app/student/subjects/page.tsx — v3: Gift inbox + Brain break + ZPD + Pet card
+// app/student/subjects/page.tsx — fix: tiến độ tính từ bài hoàn thành, không phải accuracy
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -7,15 +7,7 @@ import { useAppStore } from "@/lib/store";
 import { StudentBottomNav } from "@/components/shared/BottomNav";
 import { SUBJECTS, AVATAR_EMOJI } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
-import {
-  Flame,
-  Star,
-  LogOut,
-  Gift,
-  Trophy,
-  ChevronRight,
-  X,
-} from "lucide-react";
+import { Flame, Star, LogOut, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -24,6 +16,13 @@ interface Progress {
   accuracy: number;
   streak: number;
   xp: number;
+}
+// Tiến độ bài học thực tế theo môn
+interface LessonProgress {
+  subject: string;
+  done: number;
+  total: number;
+  pct: number;
 }
 interface Assignment {
   id: string;
@@ -34,6 +33,7 @@ interface Assignment {
   lesson_id: string | null;
   quiz_id: string | null;
   due_date: string | null;
+  status: string;
 }
 interface Achievement {
   id: string;
@@ -42,15 +42,16 @@ interface Achievement {
   earned_at: string;
 }
 
-// ZPD: if accuracy < 60% in a subject, suggest basic lesson
 const ZPD_THRESHOLD = 60;
-
-const BRAIN_BREAK_THRESHOLD = 25; // minutes
+const BRAIN_BREAK_THRESHOLD = 25;
 
 export default function SubjectsPage() {
   const router = useRouter();
   const { childSession, setChildSession } = useAppStore();
   const [progress, setProgress] = useState<Progress[]>([]);
+  const [lessonProgress, setLessonProgress] = useState<
+    Record<string, LessonProgress>
+  >({});
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [recentAchs, setRecentAchs] = useState<Achievement[]>([]);
   const [clock, setClock] = useState("");
@@ -64,42 +65,85 @@ export default function SubjectsPage() {
       return;
     }
 
+    const grade = childSession.grade;
+
     Promise.all([
       supabase.from("progress").select("*").eq("child_id", childSession.id),
       supabase
         .from("assignments")
         .select("*")
         .eq("child_id", childSession.id)
-        .eq("status", "pending")
+        .in("status", ["pending", "seen"])
         .order("created_at", { ascending: false })
-        .limit(5),
+        .limit(10),
       supabase
         .from("child_achievements")
         .select("achievement_id, earned_at, achievements(id,name,emoji)")
         .eq("child_id", childSession.id)
         .order("earned_at", { ascending: false })
         .limit(3),
-    ]).then(([{ data: prog }, { data: asgn }, { data: achs }]) => {
-      setProgress(prog || []);
-      setAssignments((asgn || []) as Assignment[]);
-      // Type-safe flatten
-      setRecentAchs(
-        (achs || []).map((a: any) => {
-          const ach = Array.isArray(a.achievements)
-            ? a.achievements[0]
-            : a.achievements;
+      // Tất cả bài học của grade này
+      supabase
+        .from("lessons")
+        .select("id, subject")
+        .eq("grade", grade)
+        .eq("is_parent_created", false),
+      // Bài đã hoàn thành của child
+      supabase
+        .from("child_lesson_progress")
+        .select("lesson_id, status")
+        .eq("child_id", childSession.id)
+        .eq("status", "done"),
+    ]).then(
+      ([
+        { data: prog },
+        { data: asgn },
+        { data: achs },
+        { data: allLessons },
+        { data: doneLessons },
+      ]) => {
+        setProgress(prog || []);
+        setAssignments((asgn || []) as Assignment[]);
+        setRecentAchs(
+          (achs || []).map((a: any) => {
+            const ach = Array.isArray(a.achievements)
+              ? a.achievements[0]
+              : a.achievements;
+            return {
+              id: ach?.id,
+              name: ach?.name,
+              emoji: ach?.emoji,
+              earned_at: a.earned_at,
+            };
+          }),
+        );
 
-          return {
-            id: ach?.id,
-            name: ach?.name,
-            emoji: ach?.emoji,
-            earned_at: a.earned_at,
+        // Tính tiến độ thực tế theo môn: số bài done / tổng bài
+        const doneSet = new Set(
+          (doneLessons || []).map((d: any) => d.lesson_id),
+        );
+        const bySubject: Record<string, { done: number; total: number }> = {};
+
+        (allLessons || []).forEach((l: any) => {
+          if (!bySubject[l.subject])
+            bySubject[l.subject] = { done: 0, total: 0 };
+          bySubject[l.subject].total++;
+          if (doneSet.has(l.id)) bySubject[l.subject].done++;
+        });
+
+        const lpMap: Record<string, LessonProgress> = {};
+        Object.entries(bySubject).forEach(([subject, { done, total }]) => {
+          lpMap[subject] = {
+            subject,
+            done,
+            total,
+            pct: total > 0 ? Math.round((done / total) * 100) : 0,
           };
-        }),
-      );
-    });
+        });
+        setLessonProgress(lpMap);
+      },
+    );
 
-    // Clock
     const tick = () =>
       setClock(
         new Date().toLocaleTimeString("vi-VN", {
@@ -110,7 +154,6 @@ export default function SubjectsPage() {
     tick();
     const id = setInterval(tick, 30000);
 
-    // Brain break timer: check every minute
     const brainTimer = setInterval(() => {
       const mins = (Date.now() - studyStartRef.current) / 60000;
       if (mins >= BRAIN_BREAK_THRESHOLD) {
@@ -125,13 +168,12 @@ export default function SubjectsPage() {
     };
   }, [childSession, router]);
 
-
   if (!childSession) return null;
 
   const totalXp = progress.reduce((s, p) => s + (p.xp || 0), 0);
   const maxStreak = Math.max(0, ...progress.map((p) => p.streak || 0));
 
-  // ZPD suggestion: find weakest subject
+  // ZPD: môn yếu nhất theo accuracy quiz (vẫn dùng accuracy để đo hiểu bài)
   const weakSubject = SUBJECTS.find((s) => {
     const p = progress.find((pr) => pr.subject === s.id);
     return p && p.accuracy < ZPD_THRESHOLD;
@@ -148,10 +190,12 @@ export default function SubjectsPage() {
       .from("assignments")
       .update({ status: "seen", seen_at: new Date().toISOString() })
       .eq("id", gift.id);
-    setAssignments((prev) => prev.filter((a) => a.id !== gift.id));
+    // Cập nhật status local thay vì xóa khỏi list
+    setAssignments((prev) =>
+      prev.map((a) => (a.id === gift.id ? { ...a, status: "seen" } : a)),
+    );
     setShowGiftDetail(null);
     if (!childSession) return;
-    // Navigate
     if (gift.lesson_id)
       router.push(
         `/student/learn?lessonId=${gift.lesson_id}&subject=math&grade=${childSession.grade}`,
@@ -161,7 +205,7 @@ export default function SubjectsPage() {
 
   return (
     <div className="screen-container bg-gradient-to-b from-blue-50 to-slate-50">
-      {/* ── Brain break modal ── */}
+      {/* Brain break modal */}
       {showBrainBreak && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center">
           <div className="bg-white rounded-t-4xl w-full max-w-lg p-8 text-center shadow-2xl">
@@ -198,7 +242,7 @@ export default function SubjectsPage() {
         </div>
       )}
 
-      {/* ── Gift detail modal ── */}
+      {/* Gift detail modal */}
       {showGiftDetail && (
         <div
           className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6"
@@ -240,7 +284,7 @@ export default function SubjectsPage() {
         </div>
       )}
 
-      {/* ── Status bar ── */}
+      {/* Status bar */}
       <div className="flex justify-between items-center px-4 pt-4 pb-2">
         <span className="font-bold text-slate-400 text-sm">{clock}</span>
         <div className="flex items-center gap-2">
@@ -261,7 +305,7 @@ export default function SubjectsPage() {
         </div>
       </div>
 
-      {/* ── Hero greeting ── */}
+      {/* Hero greeting */}
       <div className="px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
@@ -288,40 +332,49 @@ export default function SubjectsPage() {
       </div>
 
       <div className="px-4 pt-1 pb-4 space-y-4">
-        {/* ── Gift inbox ── */}
+        {/* Gift inbox */}
         {assignments.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
               🎁 Quà tặng từ Ba/Mẹ ({assignments.length})
             </p>
-            {assignments.map((gift) => (
-              <button
-                key={gift.id}
-                onClick={() => setShowGiftDetail(gift)}
-                className="w-full flex items-center gap-3 bg-gradient-to-r from-pink-50 to-purple-50 rounded-3xl p-3.5 border-2 border-pink-200 active:scale-[0.98] transition-all shadow-sm"
-              >
-                <span className="text-3xl flex-shrink-0">
-                  {gift.emoji_gift}
-                </span>
-                <div className="flex-1 text-left min-w-0">
-                  <p className="font-extrabold text-slate-800 text-sm truncate">
-                    {gift.title}
-                  </p>
-                  {gift.message && (
-                    <p className="text-slate-500 text-xs font-semibold truncate italic">
-                      &ldquo;{gift.message}&rdquo;
+            {assignments.map((gift) => {
+              const isSeen = gift.status === "seen";
+              return (
+                <button
+                  key={gift.id}
+                  onClick={() => setShowGiftDetail(gift)}
+                  className={`w-full flex items-center gap-3 rounded-3xl p-3.5 border-2 active:scale-[0.98] transition-all shadow-sm ${isSeen ? "bg-slate-50 border-slate-200" : "bg-gradient-to-r from-pink-50 to-purple-50 border-pink-200"}`}
+                >
+                  <span
+                    className={`text-3xl flex-shrink-0 ${isSeen ? "grayscale opacity-60" : ""}`}
+                  >
+                    {gift.emoji_gift}
+                  </span>
+                  <div className="flex-1 text-left min-w-0">
+                    <p
+                      className={`font-extrabold text-sm truncate ${isSeen ? "text-slate-500" : "text-slate-800"}`}
+                    >
+                      {gift.title}
                     </p>
-                  )}
-                </div>
-                <div className="flex-shrink-0 bg-pink-500 text-white text-xs font-extrabold px-2.5 py-1.5 rounded-xl">
-                  Mở!
-                </div>
-              </button>
-            ))}
+                    {gift.message && (
+                      <p className="text-slate-400 text-xs font-semibold truncate italic">
+                        &ldquo;{gift.message}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                  <div
+                    className={`flex-shrink-0 text-xs font-extrabold px-2.5 py-1.5 rounded-xl ${isSeen ? "bg-slate-200 text-slate-500" : "bg-pink-500 text-white"}`}
+                  >
+                    {isSeen ? "Xem lại" : "Mở! 🎁"}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
 
-        {/* ── Recent achievements ── */}
+        {/* Recent achievements */}
         {recentAchs.length > 0 && (
           <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-3xl p-3.5 border-2 border-yellow-200">
             <div className="flex items-center justify-between mb-2">
@@ -348,7 +401,7 @@ export default function SubjectsPage() {
           </div>
         )}
 
-        {/* ── ZPD smart suggestion ── */}
+        {/* ZPD suggestion */}
         {weakSubject && (
           <Link
             href={`/student/journey?subject=${weakSubject.id}&grade=${childSession.grade}`}
@@ -367,15 +420,17 @@ export default function SubjectsPage() {
           </Link>
         )}
 
-        {/* ── Subject grid ── */}
+        {/* Subject grid — tiến độ từ lesson completion */}
         <div>
           <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-3 px-1">
             🗺️ Khám phá môn học
           </p>
           <div className="grid grid-cols-2 gap-3">
             {SUBJECTS.map((s, i) => {
-              const prog = progress.find((p) => p.subject === s.id);
-              const acc = Math.round(prog?.accuracy || 0);
+              const lp = lessonProgress[s.id];
+              const pct = lp?.pct ?? 0;
+              const done = lp?.done ?? 0;
+              const total = lp?.total ?? 0;
               const isWide =
                 i === SUBJECTS.length - 1 && SUBJECTS.length % 2 !== 0;
               const isWeak = weakSubject?.id === s.id;
@@ -392,24 +447,25 @@ export default function SubjectsPage() {
                   <h2 className="font-display font-black text-xl text-white z-10">
                     {s.label}
                   </h2>
-                  {prog && (
-                    <div className="w-full z-10">
-                      <div className="flex justify-between mb-1">
-                        <span className="text-white/70 text-xs font-bold">
-                          Tiến độ
-                        </span>
-                        <span className="text-white font-extrabold text-xs">
-                          {acc}%
-                        </span>
-                      </div>
-                      <div className="h-2 bg-white/30 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-white rounded-full transition-all duration-700"
-                          style={{ width: `${acc}%` }}
-                        />
-                      </div>
+
+                  {/* Tiến độ thực: bài hoàn thành / tổng bài */}
+                  <div className="w-full z-10">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-white/70 text-xs font-bold">
+                        Tiến độ
+                      </span>
+                      <span className="text-white font-extrabold text-xs">
+                        {total > 0 ? `${done}/${total} bài` : "Chưa có bài"}
+                      </span>
                     </div>
-                  )}
+                    <div className="h-2 bg-white/30 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-white rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+
                   {isWeak && (
                     <span className="absolute top-2 left-2 bg-yellow-300 text-yellow-900 text-xs font-extrabold px-2 py-0.5 rounded-full z-10">
                       💡 Ôn lại!
@@ -421,7 +477,7 @@ export default function SubjectsPage() {
           </div>
         </div>
 
-        {/* ── Quick actions row ── */}
+        {/* Quick actions */}
         <div className="grid grid-cols-3 gap-2">
           <Link
             href="/student/pet"
@@ -452,7 +508,7 @@ export default function SubjectsPage() {
           </Link>
         </div>
 
-        {/* ── Grade selector (display only) ── */}
+        {/* Grade display */}
         <div>
           <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2 px-1">
             Lớp của bé
