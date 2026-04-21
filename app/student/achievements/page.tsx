@@ -49,7 +49,19 @@ export default function AchievementsPage() {
         .eq("child_id", childSession.id),
     ]).then(([{ data: all }, { data: ea }]) => {
       setAllAchs(all || []);
-      setEarned((ea || []) as EarnedAchievement[]);
+      setEarned(
+        (ea || []).map((a: any) => {
+          const ach = Array.isArray(a.achievements)
+            ? a.achievements[0]
+            : a.achievements;
+
+          return {
+            achievement_id: a.achievement_id,
+            earned_at: a.earned_at,
+            achievements: ach, // giờ là object đúng type
+          };
+        }),
+      );
       setLoading(false);
     });
   }, [childSession, router]);
