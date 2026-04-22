@@ -101,3 +101,135 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+/* 
+  Thêm vào globals.css hoặc tailwind.config.js
+  ─────────────────────────────────────────────
+  File này gồm 2 phần:
+  1. CSS keyframes cho pet animations
+  2. Tailwind config extend (copy vào tailwind.config.js → theme.extend)
+*/
+
+/* ═══════════════════════════════════════════
+   PART 1: globals.css — thêm vào cuối file
+   ═══════════════════════════════════════════ */
+
+/* Pet state animations */
+@keyframes pet-breathe {
+  0%, 100% { transform: scaleY(1) scaleX(1); }
+  50%       { transform: scaleY(1.04) scaleX(0.97); }
+}
+@keyframes pet-bounce {
+  0%, 100% { transform: translateY(0); }
+  40%       { transform: translateY(-10px); }
+  60%       { transform: translateY(-6px); }
+}
+@keyframes pet-shake {
+  0%,100% { transform: rotate(0deg) translateX(0); }
+  15%     { transform: rotate(-8deg) translateX(-3px); }
+  30%     { transform: rotate(8deg) translateX(3px); }
+  45%     { transform: rotate(-6deg) translateX(-2px); }
+  60%     { transform: rotate(6deg) translateX(2px); }
+  75%     { transform: rotate(-3deg); }
+}
+@keyframes pet-tilt {
+  0%, 100% { transform: rotate(0deg); }
+  30%       { transform: rotate(-8deg); }
+  70%       { transform: rotate(5deg); }
+}
+@keyframes pet-droop {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%       { transform: translateY(4px) rotate(-3deg); }
+}
+@keyframes pet-sway {
+  0%, 100% { transform: rotate(-4deg); }
+  50%       { transform: rotate(4deg); }
+}
+@keyframes pet-nom {
+  0%, 100% { transform: scaleY(1); }
+  25%       { transform: scaleY(0.92) scaleX(1.04); }
+  50%       { transform: scaleY(1.06) scaleX(0.96); }
+}
+@keyframes pet-jump {
+  0%, 100% { transform: translateY(0) scale(1); }
+  20%       { transform: translateY(-18px) scale(1.05); }
+  40%       { transform: translateY(-8px) scale(1.02); }
+  60%       { transform: translateY(-14px) scale(1.04); }
+  80%       { transform: translateY(-4px) scale(1.01); }
+}
+
+/* Particle float up */
+@keyframes float-up {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-60px) scale(0.5); }
+}
+
+/* Speech bubble pop */
+@keyframes bubble-pop {
+  0%   { opacity: 0; transform: translateX(-50%) scale(0.7); }
+  60%  { transform: translateX(-50%) scale(1.05); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+/* ZZZ float */
+@keyframes zzz {
+  0%   { opacity: 0; transform: translateY(0) scale(0.8); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-20px) scale(1.2); }
+}
+
+/* Twinkle stars */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50%       { opacity: 1; transform: scale(1.2); }
+}
+
+/* Shimmer for loading bar */
+@keyframes shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+/* Bubble slide up (old compat) */
+@keyframes slide-up {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Apply classes */
+.animate-pet-breathe { animation: pet-breathe 3s ease-in-out infinite; }
+.animate-pet-bounce  { animation: pet-bounce 1.2s ease-in-out infinite; }
+.animate-pet-shake   { animation: pet-shake 0.6s ease-in-out infinite; }
+.animate-pet-tilt    { animation: pet-tilt 2s ease-in-out infinite; }
+.animate-pet-droop   { animation: pet-droop 2.5s ease-in-out infinite; }
+.animate-pet-sway    { animation: pet-sway 3s ease-in-out infinite; }
+.animate-pet-nom     { animation: pet-nom 0.5s ease-in-out infinite; }
+.animate-pet-jump    { animation: pet-jump 0.8s ease-in-out infinite; }
+.animate-float-up    { animation: float-up 1s ease-out forwards; }
+.animate-bubble-pop  { animation: bubble-pop 0.3s ease-out forwards; }
+.animate-zzz         { animation: zzz 1.5s ease-in-out infinite; }
+.animate-twinkle     { animation: twinkle 2s ease-in-out infinite; }
+.animate-slide-up    { animation: slide-up 0.3s ease-out forwards; }
+
+
+/* ═══════════════════════════════════════════
+   PART 2: tailwind.config.js
+   Copy vào: theme.extend.animation + keyframes
+   ═══════════════════════════════════════════
+
+   animation: {
+     'pet-breathe': 'pet-breathe 3s ease-in-out infinite',
+     'pet-bounce':  'pet-bounce 1.2s ease-in-out infinite',
+     'pet-shake':   'pet-shake 0.6s ease-in-out infinite',
+     'pet-tilt':    'pet-tilt 2s ease-in-out infinite',
+     'pet-droop':   'pet-droop 2.5s ease-in-out infinite',
+     'pet-sway':    'pet-sway 3s ease-in-out infinite',
+     'pet-nom':     'pet-nom 0.5s ease-in-out infinite',
+     'pet-jump':    'pet-jump 0.8s ease-in-out infinite',
+     'float-up':    'float-up 1s ease-out forwards',
+     'bubble-pop':  'bubble-pop 0.3s ease-out forwards',
+     'zzz':         'zzz 1.5s ease-in-out infinite',
+     'twinkle':     'twinkle 2s ease-in-out infinite',
+   },
+*/
+

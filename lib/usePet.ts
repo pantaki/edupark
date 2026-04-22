@@ -31,35 +31,58 @@ export function usePet(childId: string | undefined) {
   const fetchPet = useCallback(async () => {
     if (!childId) return;
     let { data: petData } = await supabase
-      .from("pets").select("*").eq("child_id", childId).single();
+      .from("pets")
+      .select("*")
+      .eq("child_id", childId)
+      .single();
 
     if (!petData) {
-      // Create default pet
-      const { data: newPet } = await supabase.from("pets").insert({
-        child_id: childId,
-        name: DEFAULT_PET_NAME,
-        species: DEFAULT_PET_SPECIES,
-        level: 1, xp: 0, xp_to_next: 100,
-        happiness: 80, hunger: 80,
-        state: "idle", coins: 50,
-      }).select().single();
+      const { data: newPet } = await supabase
+        .from("pets")
+        .insert({
+          child_id: childId,
+          name: DEFAULT_PET_NAME,
+          species: DEFAULT_PET_SPECIES,
+          level: 1,
+          xp: 0,
+          xp_to_next: 100,
+          happiness: 80,
+          hunger: 80,
+          state: "idle",
+          coins: 50,
+        })
+        .select()
+        .single();
       petData = newPet;
     }
 
     if (petData) {
-      // Apply time-based decay
       const updatedHappiness = computeHappinessDecay(petData);
-      const updatedHunger    = computeHungerDecay(petData);
-      const updatedState     = computePetState({ ...petData, happiness: updatedHappiness, hunger: updatedHunger });
+      const updatedHunger = computeHungerDecay(petData);
+      const updatedState = computePetState({
+        ...petData,
+        happiness: updatedHappiness,
+        hunger: updatedHunger,
+      });
 
-      // Only update DB if values changed
-      if (updatedHappiness !== petData.happiness || updatedHunger !== petData.hunger) {
-        await supabase.from("pets").update({
+      if (
+        updatedHappiness !== petData.happiness ||
+        updatedHunger !== petData.hunger
+      ) {
+        await supabase
+          .from("pets")
+          .update({
+            happiness: updatedHappiness,
+            hunger: updatedHunger,
+            state: updatedState,
+          })
+          .eq("id", petData.id);
+        petData = {
+          ...petData,
           happiness: updatedHappiness,
           hunger: updatedHunger,
           state: updatedState,
-        }).eq("id", petData.id);
-        petData = { ...petData, happiness: updatedHappiness, hunger: updatedHunger, state: updatedState };
+        };
       }
 
       prevLevel.current = petData.level;
@@ -69,23 +92,55 @@ export function usePet(childId: string | undefined) {
   }, [childId]);
 
   // ── Fetch inventory ────────────────────────────────────────────
+  // FIX: pet_inventory.item_id là text slug (food_apple, food_cake...)
+  // KHÔNG có FK constraint nên Supabase không auto-join được shop_items(*)
+  // → fetch 2 bảng riêng rồi merge thủ công
   const fetchInventory = useCallback(async () => {
     if (!childId) return;
-    const { data } = await supabase
+
+    // Bước 1: lấy tất cả rows của child trong pet_inventory
+    const { data: invRows, error: invErr } = await supabase
       .from("pet_inventory")
-      .select("*, shop_items(*)")
+      .select("id, child_id, item_id, quantity, equipped")
       .eq("child_id", childId);
 
-    if (data) {
-      setInventory(data.map((row: {
-        quantity: number; equipped: boolean;
-        shop_items: ShopItem;
-      }) => ({
-        ...row.shop_items,
-        quantity: row.quantity,
-        equipped: row.equipped,
-      })));
+    if (invErr || !invRows || invRows.length === 0) {
+      setInventory([]);
+      return;
     }
+
+    // Bước 2: lấy danh sách item_id cần fetch
+    const itemIds = invRows.map((r) => r.item_id);
+
+    // Bước 3: fetch shop_items tương ứng
+    const { data: shopItems, error: shopErr } = await supabase
+      .from("shop_items")
+      .select("*")
+      .in("id", itemIds);
+
+    if (shopErr || !shopItems) {
+      setInventory([]);
+      return;
+    }
+
+    // Bước 4: merge — với mỗi invRow, tìm shopItem theo item_id = shop_items.id
+    const shopMap = new Map<string, ShopItem>(
+      shopItems.map((s: ShopItem) => [s.id, s]),
+    );
+
+    const merged: InventoryItem[] = invRows
+      .map((row) => {
+        const shopItem = shopMap.get(row.item_id);
+        if (!shopItem) return null; // item tồn tại trong inv nhưng không có trong shop_items
+        return {
+          ...shopItem,
+          quantity: row.quantity,
+          equipped: row.equipped,
+        } as InventoryItem;
+      })
+      .filter(Boolean) as InventoryItem[];
+
+    setInventory(merged);
   }, [childId]);
 
   useEffect(() => {
@@ -96,21 +151,33 @@ export function usePet(childId: string | undefined) {
   // ── Realtime pet updates ───────────────────────────────────────
   useEffect(() => {
     if (!pet?.id) return;
-    const ch = supabase.channel(`pet-${pet.id}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pets", filter: `id=eq.${pet.id}` },
+    const ch = supabase
+      .channel(`pet-${pet.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "pets",
+          filter: `id=eq.${pet.id}`,
+        },
         (payload) => {
           const updated = payload.new as Pet;
-          // Check level up
           if (updated.level > prevLevel.current) {
             setLevelUpAnim(true);
-            toast.success(`🎉 ${updated.name} lên cấp ${updated.level}! +${COIN_REWARDS.pet_levelup} xu!`);
+            toast.success(
+              `🎉 ${updated.name} lên cấp ${updated.level}! +${COIN_REWARDS.pet_levelup} xu!`,
+            );
             setTimeout(() => setLevelUpAnim(false), 3000);
             prevLevel.current = updated.level;
           }
           setPet(updated);
-        })
+        },
+      )
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, [pet?.id]);
 
   // ── Helper: update pet in DB + state ──────────────────────────
@@ -118,7 +185,14 @@ export function usePet(childId: string | undefined) {
     if (!pet) return;
     const merged = { ...pet, ...patch };
     merged.state = computePetState(merged);
-    await supabase.from("pets").update({ ...patch, state: merged.state, updated_at: new Date().toISOString() }).eq("id", pet.id);
+    await supabase
+      .from("pets")
+      .update({
+        ...patch,
+        state: merged.state,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", pet.id);
     setPet(merged);
   }
 
@@ -127,7 +201,6 @@ export function usePet(childId: string | undefined) {
     if (!pet || !childId) return;
 
     const progress = addXpToPet(pet, xpGain);
-
     const didLevelUp = progress.level > pet.level;
     const coinBonus = didLevelUp ? COIN_REWARDS.pet_levelup : 0;
 
@@ -145,7 +218,6 @@ export function usePet(childId: string | undefined) {
         delta: coinBonus,
         reason: "pet_levelup",
       });
-
       await supabase.from("pet_activities").insert({
         child_id: childId,
         activity: "level_up",
@@ -157,26 +229,47 @@ export function usePet(childId: string | undefined) {
   // ── FEED ───────────────────────────────────────────────────────
   async function feedPet(foodItemId: string) {
     if (!pet || !childId) return false;
-    const effect = FOOD_EFFECTS[foodItemId];
-    if (!effect) return false;
 
-    // Check inventory
-    const invItem = inventory.find(i => i.id === foodItemId);
+    // FIX: item.id trong inventory đã là slug (food_apple, food_cake...)
+    // vì fetchInventory merge từ shop_items.id = slug text
+    const effect = FOOD_EFFECTS[foodItemId];
+    if (!effect) {
+      console.error(
+        "[feedPet] Không tìm thấy effect cho:",
+        foodItemId,
+        "\nFOOD_EFFECTS keys:",
+        Object.keys(FOOD_EFFECTS),
+      );
+      toast.error("Lỗi: không tìm thấy thông tin thức ăn!");
+      return false;
+    }
+
+    // Kiểm tra inventory (dùng item.id = slug)
+    const invItem = inventory.find((i) => i.id === foodItemId);
     if (!invItem || invItem.quantity < 1) {
       toast.error("Không còn thức ăn này!");
       return false;
     }
 
-    // Consume 1 from inventory
+    // FIX: pet_inventory dùng column "item_id" (không phải "id")
+    // khi update/delete phải filter theo item_id, không phải id
     const newQty = invItem.quantity - 1;
     if (newQty <= 0) {
-      await supabase.from("pet_inventory").delete().eq("child_id", childId).eq("item_id", foodItemId);
+      await supabase
+        .from("pet_inventory")
+        .delete()
+        .eq("child_id", childId)
+        .eq("item_id", foodItemId); // ← FIX: item_id thay vì id
     } else {
-      await supabase.from("pet_inventory").update({ quantity: newQty }).eq("child_id", childId).eq("item_id", foodItemId);
+      await supabase
+        .from("pet_inventory")
+        .update({ quantity: newQty })
+        .eq("child_id", childId)
+        .eq("item_id", foodItemId); // ← FIX: item_id thay vì id
     }
 
-    // Apply effect
-    const newHunger    = Math.min(100, pet.hunger + effect.hunger);
+    // Apply effect lên pet
+    const newHunger = Math.min(100, pet.hunger + effect.hunger);
     const newHappiness = Math.min(100, pet.happiness + effect.happiness);
     await updatePet({
       hunger: newHunger,
@@ -185,19 +278,32 @@ export function usePet(childId: string | undefined) {
       last_fed_at: new Date().toISOString(),
     });
 
-    // XP + activity
+    // XP + activity log
     await gainXp(effect.xp);
     await supabase.from("pet_activities").insert({
-      child_id: childId, activity: "fed",
-      xp_gained: effect.xp, happiness_delta: effect.happiness,
+      child_id: childId,
+      activity: "fed",
+      xp_gained: effect.xp,
+      happiness_delta: effect.happiness,
     });
 
-    // Refresh inventory
+    // Refresh inventory để UI cập nhật số lượng
     fetchInventory();
-    toast.success(`${pet.name} ăn ngon lắm! +${effect.happiness} vui 🍪`);
+    toast.success(
+      `${pet.name} ăn ngon lắm! +${effect.hunger} no bụng, +${effect.happiness} vui 🍪`,
+    );
 
-    // Reset to happy/idle after 2s
-    setTimeout(() => updatePet({ state: computePetState({ ...pet, hunger: newHunger, happiness: newHappiness }) }), 2000);
+    // Reset về trạng thái bình thường sau 2s
+    setTimeout(() => {
+      updatePet({
+        state: computePetState({
+          ...pet,
+          hunger: newHunger,
+          happiness: newHappiness,
+        }),
+      });
+    }, 2000);
+
     return true;
   }
 
@@ -211,9 +317,18 @@ export function usePet(childId: string | undefined) {
       last_pet_at: new Date().toISOString(),
     });
     await supabase.from("pet_activities").insert({
-      child_id: childId, activity: "petted", xp_gained: 0, happiness_delta: 8,
+      child_id: childId,
+      activity: "petted",
+      xp_gained: 0,
+      happiness_delta: 8,
     });
-    setTimeout(() => updatePet({ state: computePetState({ ...pet, happiness: newHappiness }) }), 2000);
+    setTimeout(
+      () =>
+        updatePet({
+          state: computePetState({ ...pet, happiness: newHappiness }),
+        }),
+      2000,
+    );
   }
 
   // ── BUY ITEM ───────────────────────────────────────────────────
@@ -224,25 +339,33 @@ export function usePet(childId: string | undefined) {
       return false;
     }
 
-    // Deduct coins
     const newCoins = pet.coins - item.price;
     await supabase.from("pets").update({ coins: newCoins }).eq("id", pet.id);
-    setPet(p => p ? { ...p, coins: newCoins } : p);
+    setPet((p) => (p ? { ...p, coins: newCoins } : p));
 
-    // Add to inventory (upsert — increment quantity if already owned)
-    const { data: existing } = await supabase.from("pet_inventory")
-      .select("quantity").eq("child_id", childId).eq("item_id", item.id).single();
+    // FIX: upsert dùng item_id (slug), không phải id (UUID của pet_inventory row)
+    const { data: existing } = await supabase
+      .from("pet_inventory")
+      .select("quantity")
+      .eq("child_id", childId)
+      .eq("item_id", item.id) // ← item.id = slug từ shop_items
+      .single();
 
     if (existing) {
-      await supabase.from("pet_inventory")
+      await supabase
+        .from("pet_inventory")
         .update({ quantity: existing.quantity + 1 })
-        .eq("child_id", childId).eq("item_id", item.id);
+        .eq("child_id", childId)
+        .eq("item_id", item.id);
     } else {
-      await supabase.from("pet_inventory").insert({ child_id: childId, item_id: item.id, quantity: 1 });
+      await supabase
+        .from("pet_inventory")
+        .insert({ child_id: childId, item_id: item.id, quantity: 1 });
     }
 
-    // Log
-    await supabase.from("coin_ledger").insert({ child_id: childId, delta: -item.price, reason: "item_buy" });
+    await supabase
+      .from("coin_ledger")
+      .insert({ child_id: childId, delta: -item.price, reason: "item_buy" });
 
     fetchInventory();
     toast.success(`Đã mua ${item.name}! 🛒`);
@@ -253,10 +376,10 @@ export function usePet(childId: string | undefined) {
   async function equipItem(item: InventoryItem) {
     if (!pet || !childId) return;
     const field: Record<string, keyof Pet> = {
-      hat:        "hat_item",
+      hat: "hat_item",
       background: "bg_item",
-      accessory:  "accessory",
-      skin:       "color_skin",
+      accessory: "accessory",
+      skin: "color_skin",
     };
     const col = field[item.category];
     if (!col) return;
@@ -264,34 +387,57 @@ export function usePet(childId: string | undefined) {
     const isCurrentlyEquipped = pet[col] === item.id;
     const newVal = isCurrentlyEquipped ? null : item.id;
 
-    await supabase.from("pets").update({ [col]: newVal }).eq("id", pet.id);
-    setPet(p => p ? { ...p, [col]: newVal } : p);
-    toast.success(isCurrentlyEquipped ? `Đã tháo ${item.name}` : `Đã trang bị ${item.name}! ✨`);
+    await supabase
+      .from("pets")
+      .update({ [col]: newVal })
+      .eq("id", pet.id);
+    setPet((p) => (p ? { ...p, [col]: newVal } : p));
+    toast.success(
+      isCurrentlyEquipped
+        ? `Đã tháo ${item.name}`
+        : `Đã trang bị ${item.name}! ✨`,
+    );
   }
 
-  // ── EARN COINS (called after lesson/quiz complete) ─────────────
+  // ── EARN COINS ─────────────────────────────────────────────────
   async function earnCoins(amount: number, reason: string) {
     if (!pet || !childId) return;
     const newCoins = pet.coins + amount;
     await supabase.from("pets").update({ coins: newCoins }).eq("id", pet.id);
-    setPet(p => p ? { ...p, coins: newCoins } : p);
-    await supabase.from("coin_ledger").insert({ child_id: childId, delta: amount, reason });
+    setPet((p) => (p ? { ...p, coins: newCoins } : p));
+    await supabase
+      .from("coin_ledger")
+      .insert({ child_id: childId, delta: amount, reason });
   }
 
   // ── EARN XP FROM STUDY ─────────────────────────────────────────
   async function onLessonComplete(isPerfect: boolean) {
     if (!childId) return;
-    const xp = isPerfect ? PET_XP_REWARDS.perfect_score : PET_XP_REWARDS.lesson_complete;
-    const coins = isPerfect ? COIN_REWARDS.perfect_score : COIN_REWARDS.lesson_complete;
+    const xp = isPerfect
+      ? PET_XP_REWARDS.perfect_score
+      : PET_XP_REWARDS.lesson_complete;
+    const coins = isPerfect
+      ? COIN_REWARDS.perfect_score
+      : COIN_REWARDS.lesson_complete;
     await gainXp(xp);
     await earnCoins(coins, isPerfect ? "perfect_score" : "lesson_complete");
-    await supabase.from("pet_activities").insert({ child_id: childId, activity: "lesson_done", xp_gained: xp });
+    await supabase
+      .from("pet_activities")
+      .insert({ child_id: childId, activity: "lesson_done", xp_gained: xp });
   }
 
   return {
-    pet, inventory, loading, levelUpAnim,
-    feedPet, touchPet, buyItem, equipItem,
-    earnCoins, onLessonComplete, gainXp,
+    pet,
+    inventory,
+    loading,
+    levelUpAnim,
+    feedPet,
+    touchPet,
+    buyItem,
+    equipItem,
+    earnCoins,
+    onLessonComplete,
+    gainXp,
     refetch: fetchPet,
   };
 }
