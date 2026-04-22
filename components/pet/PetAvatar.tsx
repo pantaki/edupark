@@ -1,10 +1,19 @@
 "use client";
 // components/pet/PetAvatar.tsx
-// Animated pet with CSS keyframes, state-based expressions, accessories
+// Hỗ trợ PNG mascot EduPark + fallback emoji + animations
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import type { Pet, PetState, PetSpecies } from "@/lib/pet";
-import { SPECIES_CONFIG, getRandomMessage } from "@/lib/pet";
+import {
+  SPECIES_CONFIG,
+  BG_THEMES,
+  ACC_OVERLAY,
+  STATE_TO_IMAGE,
+  STATE_ANIMATION,
+  STATE_EMOJI_FALLBACK,
+  getRandomMessage,
+} from "@/lib/pet";
 
 interface PetAvatarProps {
   pet: Pet;
@@ -15,67 +24,62 @@ interface PetAvatarProps {
 }
 
 const SIZE_MAP = {
-  sm:  { outer: 64,  emoji: "text-4xl",  bubble: "text-xs" },
-  md:  { outer: 100, emoji: "text-6xl",  bubble: "text-sm" },
-  lg:  { outer: 140, emoji: "text-8xl",  bubble: "text-sm" },
-  xl:  { outer: 200, emoji: "text-9xl",  bubble: "text-base" },
+  sm: { outer: 72, img: 56, bubble: "text-xs", zzz: "text-xs" },
+  md: { outer: 110, img: 88, bubble: "text-sm", zzz: "text-sm" },
+  lg: { outer: 150, img: 120, bubble: "text-sm", zzz: "text-base" },
+  xl: { outer: 220, img: 180, bubble: "text-base", zzz: "text-lg" },
 };
 
-// State → CSS animation mapping
-const STATE_ANIM: Record<PetState, string> = {
-  idle:     "pet-idle",
-  happy:    "pet-happy",
-  sad:      "pet-sad",
-  excited:  "pet-excited",
-  sleep:    "pet-sleep",
-  eating:   "pet-eating",
-  studying: "pet-idle",
+// Particles per state
+const STATE_PARTICLES: Partial<Record<PetState, { emoji: string; count: number }>> = {
+  excited: { emoji: "✨", count: 4 },
+  happy:   { emoji: "💕", count: 3 },
+  cheer:   { emoji: "🎉", count: 5 },
+  eating:  { emoji: "🍪", count: 2 },
 };
 
-// Background themes
-const BG_THEMES: Record<string, { bg: string; deco: string }> = {
-  default:   { bg: "from-sky-100 to-blue-50",       deco: "☁️" },
-  bg_garden: { bg: "from-pink-100 to-green-50",     deco: "🌸" },
-  bg_space:  { bg: "from-indigo-900 to-purple-950", deco: "⭐" },
-  bg_beach:  { bg: "from-yellow-100 to-cyan-100",   deco: "🌊" },
-  bg_castle: { bg: "from-stone-200 to-amber-100",   deco: "🏰" },
-  bg_forest: { bg: "from-green-100 to-emerald-50",  deco: "🌲" },
-  bg_rainbow:{ bg: "from-pink-100 via-yellow-100 to-purple-100", deco: "🌈" },
-  bg_snow:   { bg: "from-slate-100 to-blue-50",     deco: "❄️" },
-};
-
-// Accessory overlays
-const ACC_OVERLAY: Record<string, string> = {
-  acc_glasses: "🤓",
-  acc_bow:     "🎀",
-  acc_scarf:   "🧣",
-  acc_medal:   "🥇",
-};
+interface Particle {
+  id: number;
+  emoji: string;
+  x: number;
+  delay: number;
+}
 
 export default function PetAvatar({
-  pet, size = "md", showMessage = false, onClick, className = "",
+  pet,
+  size = "md",
+  showMessage = false,
+  onClick,
+  className = "",
 }: PetAvatarProps) {
   const cfg = SPECIES_CONFIG[pet.species as PetSpecies];
-  const frames = cfg?.frames[pet.state] || ["🐱"];
-  const [frameIdx, setFrameIdx] = useState(0);
-  const [message, setMessage] = useState(getRandomMessage(pet.state));
-  const [showBubble, setShowBubble] = useState(false);
-  const [hearts, setHearts] = useState<{ id: number; x: number }[]>([]);
-  const heartId = useRef(0);
   const sz = SIZE_MAP[size];
   const bgTheme = BG_THEMES[pet.bg_item || "default"] || BG_THEMES.default;
 
-  // Frame animation
-  useEffect(() => {
-    if (frames.length <= 1) return;
-    const speed = pet.state === "excited" ? 300 : pet.state === "eating" ? 400 : 800;
-    const timer = setInterval(() => {
-      setFrameIdx(i => (i + 1) % frames.length);
-    }, speed);
-    return () => clearInterval(timer);
-  }, [frames, pet.state]);
+  const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [message, setMessage] = useState(getRandomMessage(pet.state));
+  const [showBubble, setShowBubble] = useState(false);
+  const [particles, setParticles] = useState<Particle[]>([]);
+  const [isClicked, setIsClicked] = useState(false);
+  const particleId = useRef(0);
+  const prevState = useRef(pet.state);
 
-  // Random message bubble every 8s if showMessage
+  // PNG path
+  const imgFile = STATE_TO_IMAGE[pet.state] || "idle";
+  const imgSrc = `/pets/${pet.species}/${imgFile}.png`;
+  const usePng = cfg?.hasCustomImages && !imgError;
+
+  // Khi state thay đổi → reset imgError để thử lại ảnh mới
+  useEffect(() => {
+    if (prevState.current !== pet.state) {
+      setImgError(false);
+      setImgLoaded(false);
+      prevState.current = pet.state;
+    }
+  }, [pet.state]);
+
+  // Message bubble timer
   useEffect(() => {
     if (!showMessage) return;
     const show = () => {
@@ -84,111 +88,286 @@ export default function PetAvatar({
       setTimeout(() => setShowBubble(false), 3500);
     };
     show();
-    const id = setInterval(show, 8000);
+    const id = setInterval(show, 9000);
     return () => clearInterval(id);
   }, [pet.state, showMessage]);
 
-  function handleClick() {
-    // Spawn hearts
-    const newHearts = Array.from({ length: 3 }, (_, i) => ({
-      id: heartId.current++,
-      x: Math.random() * 60 - 30,
+  // Spawn particles when state = excited/happy/cheer
+  useEffect(() => {
+    const cfg = STATE_PARTICLES[pet.state];
+    if (!cfg) {
+      setParticles([]);
+      return;
+    }
+    const newP: Particle[] = Array.from({ length: cfg.count }, (_, i) => ({
+      id: particleId.current++,
+      emoji: cfg.emoji,
+      x: (Math.random() - 0.5) * (sz.outer * 0.8),
+      delay: i * 200,
     }));
-    setHearts(h => [...h, ...newHearts]);
-    setTimeout(() => setHearts(h => h.filter(hh => !newHearts.find(n => n.id === hh.id))), 1200);
+    setParticles(newP);
+  }, [pet.state]);
+
+  function handleClick() {
+    setIsClicked(true);
+    setTimeout(() => setIsClicked(false), 300);
+
+    // Spawn hearts
+    const hearts: Particle[] = Array.from({ length: 3 }, (_, i) => ({
+      id: particleId.current++,
+      emoji: "💕",
+      x: (Math.random() - 0.5) * 60,
+      delay: i * 100,
+    }));
+    setParticles((prev) => [...prev, ...hearts]);
+    setTimeout(() => {
+      setParticles((prev) =>
+        prev.filter((p) => !hearts.find((h) => h.id === p.id)),
+      );
+    }, 1200);
+
     onClick?.();
   }
 
+  const animClass = STATE_ANIMATION[pet.state] || "animate-pet-breathe";
   const isSpaceBg = pet.bg_item === "bg_space";
 
   return (
-    <div className={`relative flex flex-col items-center ${className}`}>
+    <div
+      className={`relative flex flex-col items-center ${className}`}
+      style={{ width: sz.outer }}
+    >
       {/* Speech bubble */}
       {showBubble && (
-        <div className={`absolute -top-14 left-1/2 -translate-x-1/2 z-20
-          bg-white rounded-2xl px-3 py-2 shadow-lg border border-slate-100
-          ${sz.bubble} font-bold text-slate-700 whitespace-nowrap max-w-48 text-center
-          animate-slide-up`}>
+        <div
+          className={`absolute z-30 bg-white rounded-2xl px-3 py-2 shadow-xl border-2 border-purple-100
+          ${sz.bubble} font-bold text-slate-700 whitespace-nowrap text-center
+          animate-bubble-pop`}
+          style={{
+            bottom: sz.outer + 8,
+            left: "50%",
+            transform: "translateX(-50%)",
+            maxWidth: 200,
+            whiteSpace: "normal",
+          }}
+        >
           {message}
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full w-0 h-0
-            border-l-4 border-r-4 border-t-4 border-transparent border-t-white" />
+          {/* Tail */}
+          <div
+            className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-0 h-0
+            border-l-[8px] border-r-[8px] border-t-[8px]
+            border-l-transparent border-r-transparent border-t-white"
+          />
+          <div
+            className="absolute left-1/2 -translate-x-1/2 -bottom-3 w-0 h-0
+            border-l-[9px] border-r-[9px] border-t-[9px]
+            border-l-transparent border-r-transparent border-t-purple-100"
+          />
         </div>
       )}
 
-      {/* Pet stage */}
+      {/* Floating particles */}
+      {particles.map((p) => (
+        <span
+          key={p.id}
+          className="absolute pointer-events-none z-20 text-xl animate-float-up"
+          style={{
+            left: `calc(50% + ${p.x}px)`,
+            bottom: sz.outer * 0.7,
+            animationDelay: `${p.delay}ms`,
+          }}
+        >
+          {p.emoji}
+        </span>
+      ))}
+
+      {/* Main pet stage */}
       <button
         onClick={handleClick}
-        className={`relative rounded-3xl bg-gradient-to-br ${bgTheme.bg} flex items-center justify-center
-          overflow-hidden cursor-pointer active:scale-95 transition-transform duration-150 select-none
-          ${STATE_ANIM[pet.state]}`}
+        className={`relative rounded-3xl bg-gradient-to-br ${bgTheme.bg}
+          flex items-center justify-center overflow-hidden
+          cursor-pointer select-none border-2 border-white/60
+          shadow-xl shadow-purple-200/40
+          transition-transform duration-150
+          ${isClicked ? "scale-90" : "scale-100"}
+          ${animClass}`}
         style={{ width: sz.outer, height: sz.outer }}
         aria-label={`${pet.name} - ${pet.state}`}
       >
-        {/* Background deco */}
-        <span className="absolute bottom-1 right-2 opacity-30 text-lg pointer-events-none select-none">
-          {bgTheme.deco}
-        </span>
+        {/* Background particles */}
         {isSpaceBg && (
           <>
-            <span className="absolute top-1 left-2 text-xs opacity-50">✦</span>
-            <span className="absolute top-3 right-4 text-xs opacity-40">✧</span>
+            <span className="absolute top-2 left-3 text-xs opacity-50 animate-twinkle">
+              ✦
+            </span>
+            <span
+              className="absolute top-4 right-4 text-xs opacity-40 animate-twinkle"
+              style={{ animationDelay: "0.5s" }}
+            >
+              ✧
+            </span>
+            <span
+              className="absolute bottom-3 left-5 text-xs opacity-30 animate-twinkle"
+              style={{ animationDelay: "1s" }}
+            >
+              ⭐
+            </span>
           </>
         )}
+        {!isSpaceBg &&
+          bgTheme.particles?.slice(0, 2).map((p, i) => (
+            <span
+              key={i}
+              className="absolute opacity-20 text-base pointer-events-none"
+              style={{ bottom: 4 + i * 16, right: 6 + i * 12 }}
+            >
+              {p}
+            </span>
+          ))}
 
         {/* Hat */}
         {pet.hat_item && (
-          <span className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1 text-xl z-10 pointer-events-none select-none">
-            {pet.hat_item === "hat_crown"   ? "👑" :
-             pet.hat_item === "hat_cap"     ? "🎓" :
-             pet.hat_item === "hat_tophat"  ? "🎩" :
-             pet.hat_item === "hat_party"   ? "🎉" :
-             pet.hat_item === "hat_star"    ? "⭐" :
-             pet.hat_item === "hat_rainbow" ? "🌈" : ""}
+          <span
+            className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1 z-10 pointer-events-none select-none"
+            style={{ fontSize: sz.outer * 0.12 }}
+          >
+            {pet.hat_item === "hat_crown"
+              ? "👑"
+              : pet.hat_item === "hat_cap"
+                ? "🎓"
+                : pet.hat_item === "hat_tophat"
+                  ? "🎩"
+                  : pet.hat_item === "hat_party"
+                    ? "🎉"
+                    : pet.hat_item === "hat_star"
+                      ? "⭐"
+                      : pet.hat_item === "hat_rainbow"
+                        ? "🌈"
+                        : ""}
           </span>
         )}
 
-        {/* Main pet emoji */}
-        <span
-          className={`${sz.emoji} z-10 pointer-events-none select-none transition-all duration-200`}
-          style={{ filter: pet.color_skin === "skin_gold" ? "sepia(1) saturate(3) hue-rotate(5deg)" :
-                           pet.color_skin === "skin_rainbow" ? "hue-rotate(var(--hue,0deg))" : "none" }}
-        >
-          {frames[frameIdx]}
-        </span>
+        {/* ── PNG image (primary) ── */}
+        {usePng && (
+          <div
+            className="relative z-10"
+            style={{ width: sz.img, height: sz.img }}
+          >
+            {/* Skeleton loader */}
+            {!imgLoaded && (
+              <div className="absolute inset-0 rounded-2xl bg-white/40 animate-pulse flex items-center justify-center">
+                <span style={{ fontSize: sz.img * 0.4 }}>
+                  {STATE_EMOJI_FALLBACK[pet.state]}
+                </span>
+              </div>
+            )}
+            <Image
+              src={imgSrc}
+              alt={`${pet.name} ${pet.state}`}
+              width={sz.img}
+              height={sz.img}
+              className={`object-contain transition-opacity duration-300 drop-shadow-lg
+                ${imgLoaded ? "opacity-100" : "opacity-0"}`}
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgError(true)}
+              priority={size === "xl"}
+              draggable={false}
+            />
+          </div>
+        )}
 
-        {/* Accessory */}
+        {/* ── Emoji fallback ── */}
+        {!usePng && (
+          <span
+            className="z-10 pointer-events-none select-none"
+            style={{ fontSize: sz.img * 0.55 }}
+          >
+            {STATE_EMOJI_FALLBACK[pet.state]}
+          </span>
+        )}
+
+        {/* Accessory overlay */}
         {pet.accessory && ACC_OVERLAY[pet.accessory] && (
-          <span className="absolute bottom-1 right-1 text-base z-10 pointer-events-none select-none">
+          <span
+            className="absolute bottom-1 right-1 z-10 pointer-events-none select-none"
+            style={{ fontSize: sz.outer * 0.14 }}
+          >
             {ACC_OVERLAY[pet.accessory]}
           </span>
         )}
 
         {/* Sleeping ZZZs */}
         {pet.state === "sleep" && (
-          <div className="absolute top-1 right-2 flex flex-col items-end pointer-events-none">
-            <span className="text-xs text-blue-300 animate-float font-bold" style={{ animationDelay: "0s" }}>z</span>
-            <span className="text-sm text-blue-400 animate-float font-bold" style={{ animationDelay: "0.3s" }}>Z</span>
-            <span className="text-base text-blue-500 animate-float font-bold" style={{ animationDelay: "0.6s" }}>Z</span>
+          <div className="absolute top-1 right-2 flex flex-col items-end pointer-events-none z-20">
+            <span
+              className={`${sz.zzz} text-blue-300 animate-zzz font-black`}
+              style={{ animationDelay: "0s" }}
+            >
+              z
+            </span>
+            <span
+              className={`text-blue-400 animate-zzz font-black`}
+              style={{
+                fontSize: parseInt(sz.zzz) * 1.3,
+                animationDelay: "0.4s",
+              }}
+            >
+              Z
+            </span>
+            <span
+              className={`text-blue-500 animate-zzz font-black`}
+              style={{
+                fontSize: parseInt(sz.zzz) * 1.6,
+                animationDelay: "0.8s",
+              }}
+            >
+              Z
+            </span>
           </div>
         )}
 
         {/* Excited sparkles */}
         {pet.state === "excited" && (
           <>
-            <span className="absolute top-1 left-1 text-sm animate-ping pointer-events-none">✨</span>
-            <span className="absolute bottom-2 right-1 text-sm animate-ping pointer-events-none" style={{ animationDelay: "0.3s" }}>⭐</span>
+            <span className="absolute top-2 left-2 text-sm animate-ping pointer-events-none z-20">
+              ✨
+            </span>
+            <span
+              className="absolute bottom-3 right-2 text-sm pointer-events-none z-20 animate-ping"
+              style={{ animationDelay: "0.4s" }}
+            >
+              ⭐
+            </span>
           </>
+        )}
+
+        {/* Cheer confetti */}
+        {pet.state === "cheer" && (
+          <>
+            <span className="absolute top-1 left-2 animate-bounce pointer-events-none z-20">
+              🎊
+            </span>
+            <span
+              className="absolute top-1 right-2 animate-bounce pointer-events-none z-20"
+              style={{ animationDelay: "0.2s" }}
+            >
+              🎉
+            </span>
+          </>
+        )}
+
+        {/* Tap ripple */}
+        {isClicked && (
+          <span className="absolute inset-0 rounded-3xl bg-white/30 animate-ping pointer-events-none z-30" />
         )}
       </button>
 
-      {/* Floating hearts on click */}
-      {hearts.map(h => (
-        <span key={h.id}
-          className="absolute text-xl pointer-events-none animate-float-heart"
-          style={{ left: `calc(50% + ${h.x}px)`, bottom: "100%", zIndex: 30 }}>
-          💕
-        </span>
-      ))}
+      {/* Tap hint (chỉ hiện xl) */}
+      {size === "xl" && (
+        <p className="text-slate-400 text-xs font-bold mt-2 animate-pulse select-none">
+          Chạm vào {pet.name} 💕
+        </p>
+      )}
     </div>
   );
 }
