@@ -37,12 +37,19 @@ export default function MyLessonsPage() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
-  const [assignModal, setAssignModal] = useState<AssignModal>({ open: false, lesson: null });
+  const [assignModal, setAssignModal] = useState<AssignModal>({
+    open: false,
+    lesson: null,
+  });
   const [assigning, setAssigning] = useState(false);
 
   const loadData = useCallback(async (uid: string) => {
     const [{ data: lsns }, { data: kids }] = await Promise.all([
-      supabase.from("lessons").select("*").eq("created_by", uid).order("created_at", { ascending: false }),
+      supabase
+        .from("lessons")
+        .select("*")
+        .eq("created_by", uid)
+        .order("created_at", { ascending: false }),
       supabase.from("children").select("id,name,grade").eq("parent_id", uid),
     ]);
     setLessons(lsns || []);
@@ -52,7 +59,10 @@ export default function MyLessonsPage() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) { router.replace("/parent/login"); return; }
+      if (!session) {
+        router.replace("/parent/login");
+        return;
+      }
       setUserId(session.user.id);
       loadData(session.user.id);
     });
@@ -63,23 +73,23 @@ export default function MyLessonsPage() {
     setAssigning(true);
     try {
       const lesson = assignModal.lesson;
-      
-      // Get all lessons of this subject (any grade), sorted by order_num
+
+      // Lấy bài cùng subject + grade, sắp theo order_num
       const { data: allLessons } = await supabase
         .from("lessons")
         .select("*")
         .eq("subject", lesson.subject)
+        .eq("grade", lesson.grade)
         .order("order_num");
-      
-      // Find position of this lesson
-      const lessonIndex = (allLessons || []).findIndex((l: any) => l.id === lesson.id);
-      
+
+      const lessonIndex = (allLessons || []).findIndex(
+        (l: any) => l.id === lesson.id,
+      );
+
       let newStatus = "locked";
       if (lessonIndex === 0) {
-        // First lesson of subject → available
         newStatus = "available";
       } else if (lessonIndex > 0) {
-        // Check if previous lesson is done
         const prevLesson = (allLessons || [])[lessonIndex - 1];
         const { data: prevProgress } = await supabase
           .from("child_lesson_progress")
@@ -87,19 +97,36 @@ export default function MyLessonsPage() {
           .eq("child_id", childId)
           .eq("lesson_id", prevLesson.id)
           .maybeSingle();
-        
-        if (prevProgress?.status === "done") {
-          newStatus = "available";
-        }
+        if (prevProgress?.status === "done") newStatus = "available";
       }
-      
-      const { error } = await supabase.from("child_lesson_progress").upsert({
-        child_id: childId,
-        lesson_id: lesson.id,
-        status: newStatus,
-        stars: 0,
-      }, { onConflict: "child_id,lesson_id" });
-      if (error) throw error;
+
+      // Ghi vào child_lesson_progress
+      const { error: progError } = await supabase
+        .from("child_lesson_progress")
+        .upsert(
+          {
+            child_id: childId,
+            lesson_id: lesson.id,
+            status: newStatus,
+            stars: 0,
+          },
+          { onConflict: "child_id,lesson_id" },
+        );
+      if (progError) throw progError;
+
+      // Ghi vào assignments (type="lesson") để journey hiển thị đúng môn
+      const { error: asgError } = await supabase.from("assignments").upsert(
+        {
+          child_id: childId,
+          lesson_id: lesson.id,
+          title: lesson.title,
+          type: "lesson",
+          status: "pending",
+        },
+        { onConflict: "child_id,lesson_id" },
+      );
+      if (asgError) throw asgError;
+
       toast.success(`✅ Đã gán bài "${lesson.title}" cho con!`);
       setAssignModal({ open: false, lesson: null });
     } catch (err) {
@@ -113,9 +140,12 @@ export default function MyLessonsPage() {
   async function handleDelete(lessonId: string) {
     if (!confirm("Xóa bài học này? Hành động này không thể hoàn tác.")) return;
     try {
-      const { error } = await supabase.from("lessons").delete().eq("id", lessonId);
+      const { error } = await supabase
+        .from("lessons")
+        .delete()
+        .eq("id", lessonId);
       if (error) throw error;
-      setLessons(prev => prev.filter(l => l.id !== lessonId));
+      setLessons((prev) => prev.filter((l) => l.id !== lessonId));
       toast.success("Đã xóa bài học!");
     } catch (err) {
       toast.error("Lỗi xóa bài học!");
@@ -123,22 +153,30 @@ export default function MyLessonsPage() {
     }
   }
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="text-5xl animate-bounce">📚</div>
-    </div>
-  );
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-5xl animate-bounce">📚</div>
+      </div>
+    );
 
   return (
     <div className="screen-container">
       {/* Header */}
       <div className="page-header">
-        <button onClick={() => router.back()} className="p-2 rounded-xl active:scale-95">
+        <button
+          onClick={() => router.back()}
+          className="p-2 rounded-xl active:scale-95"
+        >
           <ArrowLeft className="w-5 h-5 text-slate-600" />
         </button>
-        <h1 className="font-display font-black text-xl flex-1">Bài học của tôi</h1>
-        <Link href="/parent/create-lesson"
-          className="bg-blue-500 text-white rounded-2xl px-4 py-2 font-extrabold text-sm flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-blue-200">
+        <h1 className="font-display font-black text-xl flex-1">
+          Bài học của tôi
+        </h1>
+        <Link
+          href="/parent/create-lesson"
+          className="bg-blue-500 text-white rounded-2xl px-4 py-2 font-extrabold text-sm flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-blue-200"
+        >
           <Plus className="w-4 h-4" /> Tạo bài
         </Link>
       </div>
@@ -147,10 +185,16 @@ export default function MyLessonsPage() {
         {lessons.length === 0 ? (
           <div className="card text-center py-12">
             <div className="text-5xl mb-3">📭</div>
-            <p className="font-extrabold text-slate-600 text-lg">Chưa có bài học nào</p>
-            <p className="text-slate-400 text-sm mt-1 mb-4">Tạo bài học đầu tiên cho con của bạn</p>
-            <Link href="/parent/create-lesson"
-              className="inline-block bg-blue-500 text-white rounded-2xl px-6 py-3 font-extrabold text-sm active:scale-95 transition-all">
+            <p className="font-extrabold text-slate-600 text-lg">
+              Chưa có bài học nào
+            </p>
+            <p className="text-slate-400 text-sm mt-1 mb-4">
+              Tạo bài học đầu tiên cho con của bạn
+            </p>
+            <Link
+              href="/parent/create-lesson"
+              className="inline-block bg-blue-500 text-white rounded-2xl px-6 py-3 font-extrabold text-sm active:scale-95 transition-all"
+            >
               🚀 Tạo bài học
             </Link>
           </div>
@@ -159,7 +203,7 @@ export default function MyLessonsPage() {
             <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider px-1">
               {lessons.length} bài học
             </p>
-            {lessons.map(lesson => (
+            {lessons.map((lesson) => (
               <div key={lesson.id} className="card space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -167,20 +211,34 @@ export default function MyLessonsPage() {
                       {lesson.title}
                     </h3>
                     <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-500">
-                      <span className="px-2 py-1 bg-slate-100 rounded-lg">{lesson.subject}</span>
-                      <span className="px-2 py-1 bg-slate-100 rounded-lg">Lớp {lesson.grade}</span>
-                      <span className="px-2 py-1 bg-slate-100 rounded-lg">{lesson.level}</span>
-                      {lesson.chapter && <span className="px-2 py-1 bg-slate-100 rounded-lg">{lesson.chapter}</span>}
+                      <span className="px-2 py-1 bg-slate-100 rounded-lg">
+                        {lesson.subject}
+                      </span>
+                      <span className="px-2 py-1 bg-slate-100 rounded-lg">
+                        Lớp {lesson.grade}
+                      </span>
+                      <span className="px-2 py-1 bg-slate-100 rounded-lg">
+                        {lesson.level}
+                      </span>
+                      {lesson.chapter && (
+                        <span className="px-2 py-1 bg-slate-100 rounded-lg">
+                          {lesson.chapter}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setAssignModal({ open: true, lesson })}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl font-extrabold text-sm bg-green-100 text-green-700 border-2 border-green-300 active:scale-95 transition-all">
+                  <button
+                    onClick={() => setAssignModal({ open: true, lesson })}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl font-extrabold text-sm bg-green-100 text-green-700 border-2 border-green-300 active:scale-95 transition-all"
+                  >
                     <Share2 className="w-4 h-4" /> Gán cho con
                   </button>
-                  <button onClick={() => handleDelete(lesson.id)}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-extrabold text-sm bg-red-100 text-red-700 border-2 border-red-200 active:scale-95 transition-all">
+                  <button
+                    onClick={() => handleDelete(lesson.id)}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-extrabold text-sm bg-red-100 text-red-700 border-2 border-red-200 active:scale-95 transition-all"
+                  >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -195,7 +253,8 @@ export default function MyLessonsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full max-h-96 overflow-y-auto">
             <h2 className="font-display font-black text-xl text-slate-800 mb-4">
-              Gán bài: <span className="text-blue-600">{assignModal.lesson.title}</span>
+              Gán bài:{" "}
+              <span className="text-blue-600">{assignModal.lesson.title}</span>
             </h2>
             <div className="space-y-2 mb-6">
               {children.length === 0 ? (
@@ -203,14 +262,17 @@ export default function MyLessonsPage() {
                   Chưa có con nào. Thêm con trước nhé!
                 </p>
               ) : (
-                children.map(child => (
+                children.map((child) => (
                   <button
                     key={child.id}
                     onClick={() => handleAssign(child.id)}
                     disabled={assigning}
                     className="w-full px-4 py-3 rounded-2xl font-extrabold text-sm text-left border-2 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-95 transition-all disabled:opacity-50"
                   >
-                    👶 {child.name} <span className="text-xs opacity-70">(Lớp {child.grade})</span>
+                    👶 {child.name}{" "}
+                    <span className="text-xs opacity-70">
+                      (Lớp {child.grade})
+                    </span>
                   </button>
                 ))
               )}

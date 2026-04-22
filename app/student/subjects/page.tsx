@@ -61,6 +61,7 @@ export default function SubjectsPage() {
   const [recentAchs, setRecentAchs] = useState<Achievement[]>([]);
   const [clock, setClock] = useState("");
   const [showBrainBreak, setShowBrainBreak] = useState(false);
+  const [showGiftList, setShowGiftList] = useState(false);
   const [showGiftDetail, setShowGiftDetail] = useState<Assignment | null>(null);
   const studyStartRef = useRef<number>(Date.now());
 
@@ -231,6 +232,84 @@ export default function SubjectsPage() {
         </div>
       )}
 
+      {showGiftList && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-end justify-center"
+          onClick={() => setShowGiftList(false)}
+        >
+          <div
+            className="bg-white rounded-t-4xl w-full max-w-lg shadow-2xl flex flex-col"
+            style={{ maxHeight: "70vh", paddingBottom: "80px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Handle bar — sticky */}
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+              <div className="w-10 h-1 rounded-full bg-slate-200" />
+            </div>
+            {/* Header — sticky */}
+            <div className="px-5 pt-1 pb-3 flex items-center justify-between flex-shrink-0 border-b border-slate-100">
+              <h2 className="font-display font-black text-xl text-slate-800">
+                🎁 Quà từ Ba/Mẹ
+              </h2>
+              <span className="bg-pink-100 text-pink-600 text-xs font-extrabold px-2.5 py-1 rounded-full">
+                {assignments.length} quà
+              </span>
+            </div>
+            {/* Scrollable list — newest first */}
+            <div
+              className="overflow-y-auto flex-1 px-5 py-3 space-y-2"
+              style={{
+                paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
+              }}
+            >
+              {[...assignments].reverse().map((gift) => {
+                const isSeen = gift.status === "seen";
+                return (
+                  <button
+                    key={gift.id}
+                    onClick={() => {
+                      setShowGiftList(false);
+                      setShowGiftDetail(gift);
+                    }}
+                    className={`w-full flex items-center gap-3 rounded-2xl p-3.5 border-2 active:scale-[0.98] transition-all text-left
+                        ${isSeen ? "bg-slate-50 border-slate-200" : "bg-gradient-to-r from-pink-50 to-purple-50 border-pink-200"}`}
+                  >
+                    <span
+                      className={`text-3xl flex-shrink-0 ${isSeen ? "grayscale opacity-60" : ""}`}
+                    >
+                      {gift.emoji_gift}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={`font-extrabold text-sm truncate ${isSeen ? "text-slate-500" : "text-slate-800"}`}
+                      >
+                        {gift.title}
+                      </p>
+                      {gift.message && (
+                        <p className="text-slate-400 text-xs font-semibold truncate italic">
+                          &ldquo;{gift.message}&rdquo;
+                        </p>
+                      )}
+                      {gift.due_date && (
+                        <p className="text-slate-300 text-xs font-semibold">
+                          ⏰ Hạn:{" "}
+                          {new Date(gift.due_date).toLocaleDateString("vi-VN")}
+                        </p>
+                      )}
+                    </div>
+                    <div
+                      className={`flex-shrink-0 text-xs font-extrabold px-2.5 py-1.5 rounded-xl ${isSeen ? "bg-slate-200 text-slate-500" : "bg-pink-500 text-white"}`}
+                    >
+                      {isSeen ? "Xem lại" : "Mở! 🎁"}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showGiftDetail && (
         <div
           className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6"
@@ -318,47 +397,45 @@ export default function SubjectsPage() {
       </div>
 
       <div className="px-4 pt-1 pb-4 space-y-4">
-        {assignments.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
-              🎁 Quà tặng từ Ba/Mẹ ({assignments.length})
-            </p>
-            {assignments.map((gift) => {
-              const isSeen = gift.status === "seen";
-              return (
-                <button
-                  key={gift.id}
-                  onClick={() => setShowGiftDetail(gift)}
-                  className={`w-full flex items-center gap-3 rounded-3xl p-3.5 border-2 active:scale-[0.98] transition-all shadow-sm
-                    ${isSeen ? "bg-slate-50 border-slate-200" : "bg-gradient-to-r from-pink-50 to-purple-50 border-pink-200"}`}
-                >
-                  <span
-                    className={`text-3xl flex-shrink-0 ${isSeen ? "grayscale opacity-60" : ""}`}
-                  >
-                    {gift.emoji_gift}
-                  </span>
-                  <div className="flex-1 text-left min-w-0">
-                    <p
-                      className={`font-extrabold text-sm truncate ${isSeen ? "text-slate-500" : "text-slate-800"}`}
-                    >
-                      {gift.title}
+        {assignments.length > 0 &&
+          (() => {
+            const newCount = assignments.filter(
+              (a) => a.status === "pending",
+            ).length;
+            // Lấy quà mới nhất để preview lời nhắn
+            const latest =
+              assignments.find((a) => a.status === "pending") || assignments[0];
+            return (
+              <button
+                onClick={() => setShowGiftList(true)}
+                className="w-full flex items-center gap-4 bg-gradient-to-r from-pink-50 to-purple-50 border-2 border-pink-200 rounded-3xl p-4 active:scale-[0.98] transition-all shadow-sm"
+              >
+                <div className="relative flex-shrink-0">
+                  <span className="text-4xl">{latest.emoji_gift}</span>
+                  {newCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-xs font-black w-5 h-5 rounded-full flex items-center justify-center">
+                      {newCount}
+                    </span>
+                  )}
+                </div>
+                <div className="flex-1 text-left min-w-0">
+                  <p className="font-extrabold text-sm text-slate-800">
+                    {newCount > 0
+                      ? `Ba/Mẹ gửi ${newCount} quà mới! 🎉`
+                      : `${assignments.length} quà từ Ba/Mẹ`}
+                  </p>
+                  {latest.message && (
+                    <p className="text-slate-400 text-xs font-semibold truncate italic">
+                      &ldquo;{latest.message}&rdquo;
                     </p>
-                    {gift.message && (
-                      <p className="text-slate-400 text-xs font-semibold truncate italic">
-                        &ldquo;{gift.message}&rdquo;
-                      </p>
-                    )}
-                  </div>
-                  <div
-                    className={`flex-shrink-0 text-xs font-extrabold px-2.5 py-1.5 rounded-xl ${isSeen ? "bg-slate-200 text-slate-500" : "bg-pink-500 text-white"}`}
-                  >
-                    {isSeen ? "Xem lại" : "Mở! 🎁"}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+                  )}
+                </div>
+                <div className="flex-shrink-0 bg-pink-500 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl">
+                  Xem →
+                </div>
+              </button>
+            );
+          })()}
 
         {recentAchs.length > 0 && (
           <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-3xl p-3.5 border-2 border-yellow-200">
