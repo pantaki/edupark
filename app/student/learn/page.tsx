@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/lib/store";
 import { supabase } from "@/lib/supabaseClient";
 import { SUBJECTS } from "@/lib/utils";
+import { COIN_REWARDS } from "@/lib/pet";
 import { ArrowLeft, Star, Flame, ChevronRight } from "lucide-react";
 
 interface Question { id: string; question: string; options: string[]; correct: string; order_num: number; }
@@ -147,23 +148,24 @@ function LearnContent() {
   const [answered, setAnswered] = useState(false);
   const [score, setScore] = useState(0);
   const [curStreak, setCurStreak] = useState(0);
-  const [maxStreak, setMaxStreak] = useState(0);
+  const [maxCombo, setMaxCombo] = useState(0); // combo câu đúng liên tiếp trong session
   const [sessionXp, setSessionXp] = useState(0);
   const [mascot, setMascot] = useState(MASCOT.ready);
   const [finished, setFinished] = useState(false);
   const [earnedStars, setEarnedStars] = useState(0);
+  const [earnedCoins, setEarnedCoins] = useState(0);
   const [showConfetti, setShowConfetti] = useState(false);
   const [timer, setTimer] = useState(TIMER_MAX);
   const [comboFlash, setComboFlash] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const subjectInfo = SUBJECTS.find(s => s.id === subject) || SUBJECTS[0];
+  const subjectInfo = SUBJECTS.find((s) => s.id === subject) || SUBJECTS[0];
 
   const startTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     setTimer(TIMER_MAX);
     timerRef.current = setInterval(() => {
-      setTimer(t => {
+      setTimer((t) => {
         if (t <= 1) {
           clearInterval(timerRef.current!);
           setAnswered(true);
@@ -177,18 +179,30 @@ function LearnContent() {
   }, []);
 
   useEffect(() => {
-    if (!childSession) { router.replace("/student/enter-code"); return; }
+    if (!childSession) {
+      router.replace("/student/enter-code");
+      return;
+    }
     (async () => {
       if (lessonId) {
         const [{ data: ls }, { data: qs }] = await Promise.all([
           supabase.from("lessons").select("*").eq("id", lessonId).single(),
-          supabase.from("lesson_questions").select("*").eq("lesson_id", lessonId).order("order_num"),
+          supabase
+            .from("lesson_questions")
+            .select("*")
+            .eq("lesson_id", lessonId)
+            .order("order_num"),
         ]);
         setLesson(ls);
         if (qs && qs.length > 0) {
-          setQuestions(qs.map((q: Question & { options: unknown }) => ({
-            ...q, options: Array.isArray(q.options) ? q.options : JSON.parse(q.options as string),
-          })));
+          setQuestions(
+            qs.map((q: Question & { options: unknown }) => ({
+              ...q,
+              options: Array.isArray(q.options)
+                ? q.options
+                : JSON.parse(q.options as string),
+            })),
+          );
         } else {
           setQuestions(BUILT_IN[subject] || BUILT_IN.math);
         }
@@ -197,12 +211,15 @@ function LearnContent() {
       }
       startTimer();
     })();
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [childSession, lessonId, subject, grade, router, startTimer]);
 
   const q = questions[qi];
   const timerPct = (timer / TIMER_MAX) * 100;
-  const timerColor = timer > 15 ? "bg-green-400" : timer > 8 ? "bg-yellow-400" : "bg-red-500";
+  const timerColor =
+    timer > 15 ? "bg-green-400" : timer > 8 ? "bg-yellow-400" : "bg-red-500";
 
   function handleAnswer(opt: string) {
     if (answered || !q) return;
@@ -213,13 +230,19 @@ function LearnContent() {
     if (correct) {
       const ns = curStreak + 1;
       setCurStreak(ns);
-      setMaxStreak(m => Math.max(m, ns));
+      setMaxCombo((m) => Math.max(m, ns));
       const xp = ns >= 5 ? 20 : ns >= 3 ? 15 : 10;
-      setSessionXp(s => s + xp);
-      setScore(s => s + 1);
-      if (ns >= 5) { setMascot(MASCOT.streak5); setComboFlash(true); setTimeout(() => setComboFlash(false), 900); }
-      else if (ns >= 3) { setMascot(MASCOT.streak3); setComboFlash(true); setTimeout(() => setComboFlash(false), 900); }
-      else setMascot(MASCOT.correct);
+      setSessionXp((s) => s + xp);
+      setScore((s) => s + 1);
+      if (ns >= 5) {
+        setMascot(MASCOT.streak5);
+        setComboFlash(true);
+        setTimeout(() => setComboFlash(false), 900);
+      } else if (ns >= 3) {
+        setMascot(MASCOT.streak3);
+        setComboFlash(true);
+        setTimeout(() => setComboFlash(false), 900);
+      } else setMascot(MASCOT.correct);
     } else {
       setCurStreak(0);
       setMascot(MASCOT.wrong);
@@ -275,19 +298,17 @@ function LearnContent() {
     }
 
     if (existing) {
-      // Update: accumulate xp and calculate streak based on daily check-in
+      // Streak chỉ tính theo ngày (không mix với combo câu trong bài)
       const newStreak = calculateStreak(
         existing.updated_at,
         existing.streak || 0,
       );
-      // If today's session has better streak in a single go, use that instead
-      const finalStreak = Math.max(newStreak, maxStreak);
 
       const { error: updateError } = await supabase
         .from("progress")
         .update({
           accuracy: acc,
-          streak: finalStreak,
+          streak: newStreak,
           xp: (existing.xp || 0) + sessionXp,
           total_questions: total,
           correct_questions: score,
@@ -301,23 +322,13 @@ function LearnContent() {
           subject,
           "| acc:",
           acc,
-          "| streak:",
-          finalStreak,
+          "| dayStreak:",
+          newStreak,
           "| xp:",
           (existing.xp || 0) + sessionXp,
         );
     } else {
       // Insert new: first day is streak = 1
-      console.log("Inserting new progress with:", {
-        child_id: childSession.id,
-        subject,
-        accuracy: acc,
-        streak: 1,
-        xp: sessionXp,
-        total_questions: total,
-        correct_questions: score,
-      });
-
       const { data: insertData, error: insertError } = await supabase
         .from("progress")
         .insert({
@@ -337,6 +348,37 @@ function LearnContent() {
       } else {
         console.log("✅ Progress inserted for", subject, "| data:", insertData);
       }
+    }
+
+    // Cấp xu cho pet sau khi hoàn thành bài học
+    const coinsEarned =
+      stars === 3
+        ? COIN_REWARDS.perfect_score // 50 xu — hoàn hảo
+        : COIN_REWARDS.lesson_complete; // 20 xu — hoàn thành thường
+
+    setEarnedCoins(coinsEarned);
+
+    const { data: petData } = await supabase
+      .from("pets")
+      .select("id, coins")
+      .eq("child_id", childSession.id)
+      .single();
+
+    if (petData) {
+      await supabase
+        .from("pets")
+        .update({ coins: petData.coins + coinsEarned })
+        .eq("id", petData.id);
+
+      await supabase.from("coin_ledger").insert({
+        child_id: childSession.id,
+        delta: coinsEarned,
+        reason: stars === 3 ? "perfect_score" : "lesson_complete",
+      });
+
+      console.log(
+        `🪙 Cấp ${coinsEarned} xu | lý do: ${stars === 3 ? "perfect_score" : "lesson_complete"}`,
+      );
     }
 
     // Save session history
@@ -363,15 +405,36 @@ function LearnContent() {
       );
 
       if (lesson) {
-        // Find next lesson from ANY grade (not just current grade), for this subject
-        const { data: nextLesson } = await supabase
+        // Tìm bài tiếp theo CÙNG subject, CÙNG grade, CÙNG chapter
+        // để tránh nhảy sang chapter hoặc lớp khác
+        let query = supabase
           .from("lessons")
           .select("id")
           .eq("subject", subject)
+          .eq("grade", lesson.grade)
           .gt("order_num", lesson.order_num || 0)
           .order("order_num")
-          .limit(1)
+          .limit(1);
+
+        // Ưu tiên cùng chapter trước
+        const { data: nextInChapter } = await query
+          .eq("chapter", lesson.chapter)
           .single();
+
+        // Nếu không có trong chapter, lấy bài kế tiếp cùng grade
+        let nextLesson = nextInChapter;
+        if (!nextLesson) {
+          const { data: nextInGrade } = await supabase
+            .from("lessons")
+            .select("id")
+            .eq("subject", subject)
+            .eq("grade", lesson.grade)
+            .gt("order_num", lesson.order_num || 0)
+            .order("order_num")
+            .limit(1)
+            .single();
+          nextLesson = nextInGrade;
+        }
         if (nextLesson) {
           await supabase.from("child_lesson_progress").upsert(
             {
@@ -400,17 +463,28 @@ function LearnContent() {
     return (
       <>
         <Confetti active={showConfetti} />
-        <div className={`min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br ${grad}`}>
+        <div
+          className={`min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br ${grad}`}
+        >
           <div className="text-8xl mb-3 animate-bounce">{mascot.emoji}</div>
-          <h1 className="font-display font-black text-4xl text-white text-center drop-shadow mb-1">{title}</h1>
-          <p className="text-white/80 font-bold text-lg text-center mb-6">{subtitle}</p>
+          <h1 className="font-display font-black text-4xl text-white text-center drop-shadow mb-1">
+            {title}
+          </h1>
+          <p className="text-white/80 font-bold text-lg text-center mb-6">
+            {subtitle}
+          </p>
 
           {/* Star rating */}
           <div className="flex gap-3 mb-6">
-            {[1,2,3].map(i => (
-              <div key={i} className={`transition-all duration-500 ${i <= earnedStars ? "scale-110" : "scale-90 opacity-40"}`}
-                style={{ transitionDelay: `${i * 150}ms` }}>
-                <Star className={`w-14 h-14 ${i <= earnedStars ? "text-yellow-300 fill-yellow-300 drop-shadow-lg" : "text-white/30"}`} />
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className={`transition-all duration-500 ${i <= earnedStars ? "scale-110" : "scale-90 opacity-40"}`}
+                style={{ transitionDelay: `${i * 150}ms` }}
+              >
+                <Star
+                  className={`w-14 h-14 ${i <= earnedStars ? "text-yellow-300 fill-yellow-300 drop-shadow-lg" : "text-white/30"}`}
+                />
               </div>
             ))}
           </div>
@@ -418,30 +492,51 @@ function LearnContent() {
           {/* Stats */}
           <div className="flex gap-3 mb-8 flex-wrap justify-center">
             {[
-              { label:"Đúng", value:`${score}/${total}` },
-              { label:"Chính xác", value:`${acc}%` },
-              { label:"XP", value:`+${sessionXp}` },
-              { label:"Streak", value:`${maxStreak}🔥` },
+              { label: "Đúng", value: `${score}/${total}` },
+              { label: "Chính xác", value: `${acc}%` },
+              { label: "XP", value: `+${sessionXp}` },
+              { label: "Xu 🪙", value: `+${earnedCoins}` },
             ].map((s, i) => (
-              <div key={i} className="bg-white/20 backdrop-blur rounded-2xl px-4 py-3 text-center min-w-[72px]">
-                <div className="font-display font-black text-2xl text-white">{s.value}</div>
+              <div
+                key={i}
+                className="bg-white/20 backdrop-blur rounded-2xl px-4 py-3 text-center min-w-[72px]"
+              >
+                <div className="font-display font-black text-2xl text-white">
+                  {s.value}
+                </div>
                 <div className="text-white/70 text-xs font-bold">{s.label}</div>
               </div>
             ))}
           </div>
 
           <div className="flex gap-3 w-full max-w-xs">
-            <button onClick={() => router.replace(`/student/journey?subject=${subject}&grade=${grade}`)}
-              className="flex-1 bg-white/20 text-white border-2 border-white/30 font-extrabold rounded-2xl py-4 active:scale-95 transition-all">
+            <button
+              onClick={() =>
+                router.replace(
+                  `/student/journey?subject=${subject}&grade=${grade}`,
+                )
+              }
+              className="flex-1 bg-white/20 text-white border-2 border-white/30 font-extrabold rounded-2xl py-4 active:scale-95 transition-all"
+            >
               🗺️ Bản đồ
             </button>
-            <button onClick={() => {
-              setQi(0); setSelected(null); setAnswered(false);
-              setScore(0); setCurStreak(0); setMaxStreak(0);
-              setFinished(false); setSessionXp(0);
-              setMascot(MASCOT.ready); setShowConfetti(false);
-              startTimer();
-            }} className="flex-1 bg-white text-slate-800 font-extrabold rounded-2xl py-4 active:scale-95 transition-all shadow-xl">
+            <button
+              onClick={() => {
+                setQi(0);
+                setSelected(null);
+                setAnswered(false);
+                setScore(0);
+                setCurStreak(0);
+                setMaxCombo(0);
+                setFinished(false);
+                setSessionXp(0);
+                setEarnedCoins(0);
+                setMascot(MASCOT.ready);
+                setShowConfetti(false);
+                startTimer();
+              }}
+              className="flex-1 bg-white text-slate-800 font-extrabold rounded-2xl py-4 active:scale-95 transition-all shadow-xl"
+            >
               Lại nào! 🚀
             </button>
           </div>

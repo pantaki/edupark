@@ -78,15 +78,15 @@ export default function SendGiftPage() {
       : quizzes.find(q => q.id === selectedQuiz)?.title;
 
     const { error } = await supabase.from("assignments").insert({
-      parent_id:  userId,
-      child_id:   selectedChild,
-      lesson_id:  giftType === "lesson" ? selectedLesson || null : null,
-      quiz_id:    giftType === "quiz"   ? selectedQuiz   || null : null,
-      title:      lessonTitle || "Bài học hôm nay",
-      message:    message.trim() || null,
+      parent_id: userId,
+      child_id: selectedChild,
+      lesson_id: giftType === "lesson" ? selectedLesson || null : null,
+      quiz_id: giftType === "quiz" ? selectedQuiz || null : null,
+      title: lessonTitle || "Bài học hôm nay",
+      message: message.trim() || null,
       emoji_gift: giftEmoji,
-      type:       giftType,
-      due_date:   dueDate || null,
+      type: "gift",
+      due_date: dueDate || null,
     });
     if (error) { toast.error("Không thể gửi quà!"); setSending(false); return; }
 
