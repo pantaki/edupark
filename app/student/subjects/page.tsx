@@ -197,7 +197,7 @@ export default function SubjectsPage() {
   return (
     <div className="screen-container bg-gradient-to-b from-blue-50 to-slate-50">
       {showBrainBreak && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center pb-[70px]">
           <div className="bg-white rounded-t-4xl w-full max-w-lg p-8 text-center shadow-2xl">
             <div className="text-7xl mb-4 animate-bounce">🐻</div>
             <h2 className="font-display font-black text-2xl text-slate-800 mb-2">
