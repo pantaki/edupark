@@ -5,7 +5,7 @@ import { useRequireChild } from "@/lib/useRequireChild";
 import { StudentBottomNav } from "@/components/shared/BottomNav";
 import { SUBJECTS, AVATAR_EMOJI } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
-import { Flame, Star, LogOut, ChevronRight } from "lucide-react";
+import { Flame, Star, LogOut, ChevronRight, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -63,6 +63,7 @@ export default function SubjectsPage() {
   const [showBrainBreak, setShowBrainBreak] = useState(false);
   const [showGiftList, setShowGiftList] = useState(false);
   const [showGiftDetail, setShowGiftDetail] = useState<Assignment | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const studyStartRef = useRef<number>(Date.now());
 
   useEffect(() => {
@@ -156,9 +157,27 @@ export default function SubjectsPage() {
         clearInterval(brainTimer);
       }
     }, 60000);
+
+    const channel = supabase
+      .channel(`gifts:${childSession.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "assignments",
+          filter: `child_id=eq.${childSession.id}`,
+        },
+        (payload) => {
+          setAssignments((prev) => [payload.new as Assignment, ...prev]);
+        },
+      )
+      .subscribe();
+
     return () => {
       clearInterval(id);
       clearInterval(brainTimer);
+      supabase.removeChannel(channel);
     };
   }, [ready, childSession]);
 
@@ -170,6 +189,12 @@ export default function SubjectsPage() {
     const p = progress.find((pr) => pr.subject === s.id);
     return p && p.accuracy < ZPD_THRESHOLD;
   });
+
+  async function deleteGift(giftId: string) {
+    await supabase.from("assignments").delete().eq("id", giftId);
+    setAssignments((prev) => prev.filter((a) => a.id !== giftId));
+    setConfirmDeleteId(null);
+  }
 
   function handleLogout() {
     setChildSession(null);
@@ -302,6 +327,12 @@ export default function SubjectsPage() {
                     >
                       {isSeen ? "Xem lại" : "Mở! 🎁"}
                     </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(gift.id); }}
+                      className="flex-shrink-0 p-1.5 rounded-xl text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </button>
                 );
               })}
@@ -582,6 +613,30 @@ export default function SubjectsPage() {
         </div>
       </div>
       <StudentBottomNav />
+
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-6">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl flex flex-col items-center gap-4">
+            <span className="text-5xl">🗑️</span>
+            <p className="font-black text-slate-800 text-lg text-center">Xóa quà này?</p>
+            <p className="text-slate-400 text-sm text-center">Quà sẽ bị xóa vĩnh viễn và không thể khôi phục.</p>
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="flex-1 py-3 rounded-2xl border-2 border-slate-200 font-extrabold text-slate-600 active:scale-95 transition-all"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => deleteGift(confirmDeleteId)}
+                className="flex-1 py-3 rounded-2xl bg-red-500 font-extrabold text-white active:scale-95 transition-all"
+              >
+                Xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

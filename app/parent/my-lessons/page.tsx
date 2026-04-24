@@ -115,17 +115,15 @@ export default function MyLessonsPage() {
       if (progError) throw progError;
 
       // Ghi vào assignments (type="lesson") để journey hiển thị đúng môn
-      const { error: asgError } = await supabase.from("assignments").upsert(
-        {
-          child_id: childId,
-          lesson_id: lesson.id,
-          title: lesson.title,
-          type: "lesson",
-          status: "pending",
-        },
-        { onConflict: "child_id,lesson_id" },
-      );
-      if (asgError) throw asgError;
+      const { error: asgError } = await supabase.from("assignments").insert({
+        parent_id: userId,
+        child_id: childId,
+        lesson_id: lesson.id,
+        title: lesson.title,
+        type: "lesson",
+        status: "pending",
+      });
+      if (asgError && asgError.code !== "23505") throw asgError;
 
       toast.success(`✅ Đã gán bài "${lesson.title}" cho con!`);
       setAssignModal({ open: false, lesson: null });
