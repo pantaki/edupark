@@ -14,11 +14,27 @@ import {
   STATE_EMOJI_FALLBACK,
   getRandomMessage,
 } from "@/lib/pet";
+import PetSprite, { type PetSpriteState } from "./PetSprite";
+import { getPetCatalogEntry } from "@/lib/pet";
+
+const PET_STATE_TO_SPRITE: Record<PetState, PetSpriteState> = {
+  idle:     "idle",
+  happy:    "waving",
+  sad:      "failed",
+  excited:  "jumping",
+  sleep:    "waiting",
+  eating:   "idle",
+  studying: "review",
+  thinking: "waiting",
+  cheer:    "waving",
+};
 
 interface PetAvatarProps {
   pet: Pet;
   size?: "sm" | "md" | "lg" | "xl";
   showMessage?: boolean;
+  noFrame?: boolean;    // bỏ outer box — dùng khi pet đứng trong PetRoom
+  bubbleTop?: boolean;  // force bubble lên trên đầu dù noFrame
   onClick?: () => void;
   className?: string;
 }
@@ -49,6 +65,8 @@ export default function PetAvatar({
   pet,
   size = "md",
   showMessage = false,
+  noFrame = false,
+  bubbleTop = false,
   onClick,
   className = "",
 }: PetAvatarProps) {
@@ -129,21 +147,34 @@ export default function PetAvatar({
     onClick?.();
   }
 
-  const animClass = STATE_ANIMATION[pet.state] || "animate-pet-breathe";
+  // noFrame: dùng animate scale-only (không translateY) để chân pet không nhấc lên
+  const animClass = noFrame
+    ? (STATE_ANIMATION[pet.state] || "animate-pet-breathe").replace("animate-pet-bounce", "animate-pet-breathe").replace("animate-pet-jump", "animate-pet-breathe")
+    : (STATE_ANIMATION[pet.state] || "animate-pet-breathe");
   const isSpaceBg = pet.bg_item === "bg_space";
+
+  // preview nhỏ (noFrame, không bubbleTop) → bubble bên phải tránh bị clip
+  // full screen (noFrame + bubbleTop) → bubble trên đầu như bình thường
+  const bubbleSide = noFrame && !bubbleTop;
 
   return (
     <div
       className={`relative flex flex-col items-center ${className}`}
       style={{ width: sz.outer }}
     >
-      {/* Speech bubble */}
+      {/* Speech bubble — bên phải khi noFrame, trên đầu khi normal */}
       {showBubble && (
         <div
           className={`absolute z-30 bg-white rounded-2xl px-3 py-2 shadow-xl border-2 border-purple-100
-          ${sz.bubble} font-bold text-slate-700 whitespace-nowrap text-center
-          animate-bubble-pop`}
-          style={{
+          ${sz.bubble} font-bold text-slate-700 text-center animate-bubble-pop`}
+          style={bubbleSide ? {
+            // bên phải pet
+            top: "20%",
+            left: sz.outer + 8,
+            maxWidth: 160,
+            whiteSpace: "normal",
+          } : {
+            // trên đầu
             bottom: sz.outer + 8,
             left: "50%",
             transform: "translateX(-50%)",
@@ -153,16 +184,21 @@ export default function PetAvatar({
         >
           {message}
           {/* Tail */}
-          <div
-            className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-0 h-0
-            border-l-[8px] border-r-[8px] border-t-[8px]
-            border-l-transparent border-r-transparent border-t-white"
-          />
-          <div
-            className="absolute left-1/2 -translate-x-1/2 -bottom-3 w-0 h-0
-            border-l-[9px] border-r-[9px] border-t-[9px]
-            border-l-transparent border-r-transparent border-t-purple-100"
-          />
+          {bubbleSide ? (
+            // tail bên trái bubble (chỉ vào pet)
+            <div className="absolute -left-2 top-4 w-0 h-0
+              border-t-[6px] border-b-[6px] border-r-[8px]
+              border-t-transparent border-b-transparent border-r-white" />
+          ) : (
+            <>
+              <div className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-0 h-0
+                border-l-[8px] border-r-[8px] border-t-[8px]
+                border-l-transparent border-r-transparent border-t-white" />
+              <div className="absolute left-1/2 -translate-x-1/2 -bottom-3 w-0 h-0
+                border-l-[9px] border-r-[9px] border-t-[9px]
+                border-l-transparent border-r-transparent border-t-purple-100" />
+            </>
+          )}
         </div>
       )}
 
@@ -184,14 +220,13 @@ export default function PetAvatar({
       {/* Main pet stage */}
       <button
         onClick={handleClick}
-        className={`relative rounded-3xl bg-gradient-to-br ${bgTheme.bg}
-          flex items-center justify-center overflow-hidden
-          cursor-pointer select-none border-2 border-white/60
-          shadow-xl shadow-purple-200/40
-          transition-transform duration-150
+        className={`relative flex items-center justify-center
+          cursor-pointer select-none transition-transform duration-150
           ${isClicked ? "scale-90" : "scale-100"}
-          ${animClass}`}
-        style={{ width: sz.outer, height: sz.outer }}
+          ${animClass}
+          ${noFrame ? "" : `rounded-3xl bg-gradient-to-br ${bgTheme.bg} overflow-hidden border-2 border-white/60 shadow-xl shadow-purple-200/40`}
+        `}
+        style={{ width: sz.outer, height: noFrame ? Math.round(208 * (sz.img / 192)) : sz.outer }}
         aria-label={`${pet.name} - ${pet.state}`}
       >
         {/* Background particles */}
@@ -276,8 +311,20 @@ export default function PetAvatar({
           </div>
         )}
 
+        {/* ── Petdex sprite (có spritesheet) ── */}
+        {!usePng && (() => {
+          const entry = getPetCatalogEntry(pet.species as PetSpecies);
+          return entry?.spriteType === "sprite" ? (
+            <PetSprite
+              petId={entry.petdexId}
+              state={PET_STATE_TO_SPRITE[pet.state] ?? "idle"}
+              size={sz.img}
+            />
+          ) : null;
+        })()}
+
         {/* ── Emoji fallback ── */}
-        {!usePng && (
+        {!usePng && getPetCatalogEntry(pet.species as PetSpecies)?.spriteType !== "sprite" && (
           <span
             className="z-10 pointer-events-none select-none"
             style={{ fontSize: sz.img * 0.55 }}

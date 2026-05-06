@@ -11,11 +11,10 @@ import {
 } from "@/lib/pet";
 import { toast } from "sonner";
 
-const DEFAULT_PET_SPECIES = "cat";
-const DEFAULT_PET_NAME = "Mochi";
-
 export function usePet(childId: string | undefined) {
   const [pet, setPet] = useState<Pet | null>(null);
+  const [needsPetSelection, setNeedsPetSelection] = useState(false);
+  const [ownedPetIds, setOwnedPetIds] = useState<string[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [levelUpAnim, setLevelUpAnim] = useState(false);
@@ -27,7 +26,7 @@ export function usePet(childId: string | undefined) {
     xp_to_next: number;
   };
 
-  // ── Fetch pet (create if not exists) ──────────────────────────
+  // ── Fetch pet (show selection if not exists) ───────────────────
   const fetchPet = useCallback(async () => {
     if (!childId) return;
     let { data: petData } = await supabase
@@ -37,23 +36,9 @@ export function usePet(childId: string | undefined) {
       .single();
 
     if (!petData) {
-      const { data: newPet } = await supabase
-        .from("pets")
-        .insert({
-          child_id: childId,
-          name: DEFAULT_PET_NAME,
-          species: DEFAULT_PET_SPECIES,
-          level: 1,
-          xp: 0,
-          xp_to_next: 100,
-          happiness: 80,
-          hunger: 80,
-          state: "idle",
-          coins: 50,
-        })
-        .select()
-        .single();
-      petData = newPet;
+      setNeedsPetSelection(true);
+      setLoading(false);
+      return;
     }
 
     if (petData) {
@@ -87,6 +72,19 @@ export function usePet(childId: string | undefined) {
 
       prevLevel.current = petData.level;
       setPet(petData);
+
+      // Lấy danh sách pet IDs đã sở hữu từ pet_inventory
+      // Chỉ lấy item_id có prefix "junie","bubu","peanut",... (pet catalog IDs)
+      const PET_IDS = ["junie","bubu","peanut","bella","totoro","douos-douos","super-piglet","kitsune","luffy","academicasi","wukong-4"];
+      const { data: petItems } = await supabase
+        .from("pet_inventory")
+        .select("item_id")
+        .eq("child_id", childId)
+        .in("item_id", PET_IDS);
+      const ids = (petItems ?? []).map((r: { item_id: string }) => r.item_id);
+      // User đã chọn pet nếu có ít nhất 1 pet trong inventory
+      const hasChosen = ids.length > 0;
+      setOwnedPetIds(hasChosen ? ids : []);
     }
     setLoading(false);
   }, [childId]);
@@ -426,8 +424,101 @@ export function usePet(childId: string | undefined) {
       .insert({ child_id: childId, activity: "lesson_done", xp_gained: xp });
   }
 
+  // ── CREATE PET (sau khi chọn lần đầu) ────────────────────────────
+  // catalogId: slug trong PET_CATALOG (vd "junie"), species: value DB hợp lệ
+  async function createPet(catalogId: string, species: string, name: string): Promise<boolean> {
+    if (!childId) return false;
+    const { error } = await supabase.from("pets").insert({
+      child_id: childId,
+      name: name.trim(),
+      species,
+      level: 1, xp: 0, xp_to_next: 100,
+      happiness: 80, hunger: 80, state: "idle", coins: 50,
+    });
+    if (error) {
+      console.error("[createPet] error:", error);
+      toast.error(`Không tạo được pet: ${error.message}`);
+      return false;
+    }
+    // Mark pet đã chọn vào inventory
+    await supabase.from("pet_inventory")
+      .upsert({ child_id: childId, item_id: catalogId, quantity: 1 }, { onConflict: "child_id,item_id" });
+
+    const { data: newPet, error: fetchErr } = await supabase
+      .from("pets").select("*").eq("child_id", childId).single();
+    if (fetchErr || !newPet) {
+      toast.error(`Lỗi đọc pet: ${fetchErr?.message}`);
+      return false;
+    }
+    setPet(newPet);
+    setOwnedPetIds([catalogId]);
+    setNeedsPetSelection(false);
+    return true;
+  }
+
+  // ── RENAME PET (chỉ đổi tên) ──────────────────────────────────
+  async function renamePet(name: string): Promise<boolean> {
+    if (!pet) return false;
+    const { error } = await supabase
+      .from("pets")
+      .update({ name: name.trim() })
+      .eq("id", pet.id);
+    if (error) {
+      toast.error(`Lỗi: ${error.message}`);
+      return false;
+    }
+    setPet((p) => (p ? { ...p, name: name.trim() } : p));
+    setNeedsPetSelection(false);
+    toast.success(`Đã đổi tên thành ${name.trim()}! 🏷️`);
+    return true;
+  }
+
+  // ── CHANGE PET (đổi pet, giữ coins + level) ────────────────────
+  async function changePet(catalogId: string, species: string, name: string): Promise<boolean> {
+    if (!pet || !childId) return false;
+    const { data: updated, error } = await supabase
+      .from("pets")
+      .update({ species, name: name.trim(), state: "idle", happiness: 80, hunger: 80 })
+      .eq("id", pet.id).select().single();
+    if (error) {
+      console.error("[changePet] error:", error);
+      toast.error("Không đổi được pet, thử lại nhé!");
+      return false;
+    }
+    // Mark pet mới vào inventory
+    await supabase.from("pet_inventory")
+      .upsert({ child_id: childId, item_id: catalogId, quantity: 1 }, { onConflict: "child_id,item_id" });
+
+    if (updated) {
+      setPet(updated);
+      setOwnedPetIds(prev => prev.includes(catalogId) ? prev : [...prev, catalogId]);
+      setNeedsPetSelection(false);
+    }
+    return true;
+  }
+
+  // ── EQUIP ROOM BG ──────────────────────────────────────────────
+  async function equipRoomBg(bgId: string) {
+    if (!pet) return;
+    await supabase.from("pets").update({ room_bg: bgId }).eq("id", pet.id);
+    setPet(p => p ? { ...p, room_bg: bgId } : p);
+    toast.success("Đã đổi phòng! 🏠");
+  }
+
+  // ── TOGGLE ROOM DECO ───────────────────────────────────────────
+  async function toggleRoomDeco(decoId: string) {
+    if (!pet) return;
+    const current = pet.room_decos ?? [];
+    const next = current.includes(decoId)
+      ? current.filter(d => d !== decoId)
+      : [...current, decoId];
+    await supabase.from("pets").update({ room_decos: next }).eq("id", pet.id);
+    setPet(p => p ? { ...p, room_decos: next } : p);
+  }
+
   return {
     pet,
+    needsPetSelection,
     inventory,
     loading,
     levelUpAnim,
@@ -438,6 +529,13 @@ export function usePet(childId: string | undefined) {
     earnCoins,
     onLessonComplete,
     gainXp,
+    createPet,
+    changePet,
+    renamePet,
+    equipRoomBg,
+    toggleRoomDeco,
+    ownedPetIds,
+    setNeedsPetSelection,
     refetch: fetchPet,
   };
 }

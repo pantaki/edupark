@@ -1,5 +1,168 @@
 // lib/pet.ts — Pet System với PNG mascot EduPark
 
+// ── Pet Catalog — danh sách pet và stats ─────────────────────
+export interface PetCatalogEntry {
+  id: string;          // unique slug, dùng làm shop_item id
+  species: PetSpecies; // map vào DB constraint
+  name: string;        // tên mặc định hiển thị
+  description: string;
+  emoji: string;
+  price: number;       // 0 = miễn phí (chọn lúc đầu), > 0 = mua shop
+  requiredLevel: number; // level pet hiện tại cần đạt để mở khoá
+  stats: {
+    xpBonus: number;      // % XP nhận thêm khi học
+    happinessDecay: number; // % giảm tốc độ mất hạnh phúc (0 = bình thường)
+    hungerDecay: number;   // % giảm tốc độ mất no bụng
+  };
+  spriteType: "sprite" | "emoji"; // "sprite" = dùng PetSprite (petdex spritesheet), "emoji" = fallback
+  petdexId: string; // slug trong /public/pets/{petdexId}/spritesheet.webp
+}
+
+export const PET_CATALOG: PetCatalogEntry[] = [
+  // ── Miễn phí — chọn lúc đầu ──────────────────────────────────
+  {
+    id: "junie",
+    petdexId: "junie",
+    species: "bunny",
+    name: "Junie",
+    description: "Thỏ cảnh sát năng động! Học nhanh hơn và luôn vui vẻ.",
+    emoji: "🐰",
+    price: 0,
+    requiredLevel: 1,
+    stats: { xpBonus: 10, happinessDecay: 5, hungerDecay: 0 },
+    spriteType: "sprite",
+  },
+  {
+    id: "bubu",
+    petdexId: "bubu",
+    species: "bear",
+    name: "Bubu",
+    description: "Gấu nâu hiền lành! Hạnh phúc lâu dài, không bao giờ cáu.",
+    emoji: "🐻",
+    price: 0,
+    requiredLevel: 1,
+    stats: { xpBonus: 0, happinessDecay: 15, hungerDecay: 0 },
+    spriteType: "sprite",
+  },
+  {
+    id: "peanut",
+    petdexId: "peanut",
+    species: "dog",
+    name: "Peanut",
+    description: "Voi con tò mò dễ thương! Không bao giờ kêu đói.",
+    emoji: "🐘",
+    price: 0,
+    requiredLevel: 1,
+    stats: { xpBonus: 0, happinessDecay: 0, hungerDecay: 15 },
+    spriteType: "sprite",
+  },
+  // ── Mua ở shop ───────────────────────────────────────────────
+  {
+    id: "bella",
+    petdexId: "bella",
+    species: "fox",
+    name: "Bella",
+    description: "Gấu thông minh của Bearish! XP bonus và giảm mất hạnh phúc.",
+    emoji: "🐻",
+    price: 200,
+    requiredLevel: 2,
+    stats: { xpBonus: 5, happinessDecay: 10, hungerDecay: 0 },
+    spriteType: "sprite",
+  },
+  {
+    id: "totoro",
+    petdexId: "totoro",
+    species: "cat",
+    name: "Totoro",
+    description: "Chinchilla kỳ diệu! Hạnh phúc rất lâu và ít đói.",
+    emoji: "🐱",
+    price: 300,
+    requiredLevel: 3,
+    stats: { xpBonus: 0, happinessDecay: 10, hungerDecay: 10 },
+    spriteType: "sprite",
+  },
+  {
+    id: "douos-douos",
+    petdexId: "douos-douos",
+    species: "cat",
+    name: "DouOS",
+    description: "Bean vàng đội mũ hổ siêu cute! Bonus XP tốt.",
+    emoji: "🐯",
+    price: 350,
+    requiredLevel: 3,
+    stats: { xpBonus: 8, happinessDecay: 5, hungerDecay: 0 },
+    spriteType: "sprite",
+  },
+  {
+    id: "super-piglet",
+    petdexId: "super-piglet",
+    species: "dino",
+    name: "Super Piglet",
+    description: "Heo nhí đeo kính siêu anh hùng! XP cao nhất nhóm thường.",
+    emoji: "🐷",
+    price: 400,
+    requiredLevel: 4,
+    stats: { xpBonus: 15, happinessDecay: 0, hungerDecay: 0 },
+    spriteType: "sprite",
+  },
+  {
+    id: "kitsune",
+    petdexId: "kitsune",
+    species: "fox",
+    name: "Kitsune",
+    description: "Cáo ninja huyền bí! Bảo vệ hạnh phúc và giảm đói tốt.",
+    emoji: "🦊",
+    price: 500,
+    requiredLevel: 5,
+    stats: { xpBonus: 5, happinessDecay: 10, hungerDecay: 10 },
+    spriteType: "sprite",
+  },
+  {
+    id: "luffy",
+    petdexId: "luffy",
+    species: "dino",
+    name: "Luffy",
+    description: "Thuyền trưởng mũ rơm! Năng lượng bất tận, XP siêu cao.",
+    emoji: "🏴‍☠️",
+    price: 600,
+    requiredLevel: 6,
+    stats: { xpBonus: 20, happinessDecay: 0, hungerDecay: -5 },
+    spriteType: "sprite",
+  },
+  {
+    id: "academicasi",
+    petdexId: "academicasi",
+    species: "unicorn",
+    name: "AcademicASI",
+    description: "Pháp sư học thuật! XP bonus cực cao cho pet học giỏi.",
+    emoji: "🧙",
+    price: 700,
+    requiredLevel: 7,
+    stats: { xpBonus: 25, happinessDecay: 5, hungerDecay: 5 },
+    spriteType: "sprite",
+  },
+  {
+    id: "wukong-4",
+    petdexId: "wukong-4",
+    species: "dragon",
+    name: "WuKong",
+    description: "Tôn Ngộ Không pixel art huyền thoại! Stats tổng hợp mạnh nhất.",
+    emoji: "🐵",
+    price: 900,
+    requiredLevel: 9,
+    stats: { xpBonus: 15, happinessDecay: 10, hungerDecay: 10 },
+    spriteType: "sprite",
+  },
+];
+
+export function getPetCatalogEntry(species: PetSpecies): PetCatalogEntry | undefined {
+  return PET_CATALOG.find((p) => p.species === species);
+}
+
+export function getPetCatalogById(id: string): PetCatalogEntry | undefined {
+  return PET_CATALOG.find((p) => p.id === id);
+}
+
 export type PetSpecies =
   | "cat"
   | "dog"
@@ -19,7 +182,7 @@ export type PetState =
   | "studying"
   | "thinking"
   | "cheer";
-export type ItemCategory = "hat" | "background" | "accessory" | "food" | "skin";
+export type ItemCategory = "hat" | "background" | "accessory" | "food" | "skin" | "room_bg" | "room_deco";
 export type Rarity = "common" | "rare" | "epic" | "legendary";
 
 export interface Pet {
@@ -38,6 +201,8 @@ export interface Pet {
   bg_item: string | null;
   accessory: string | null;
   coins: number;
+  room_bg: string | null;       // ID của RoomBackground đang dùng
+  room_decos: string[] | null;  // Danh sách deco IDs đang đặt trong phòng
   last_fed_at: string;
   last_pet_at: string;
 }
